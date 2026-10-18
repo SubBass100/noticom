@@ -212,6 +212,16 @@ adoption press) the node uses `/etc/noticom/node.env`
 (`NOTICOM_BUTTON_PIN`, `NOTICOM_BUTTON_NC`), written by the installer and
 overridable at install time.
 
+### Networking
+
+- **Wi-Fi power saving must be off.** With it on, the Pi misses incoming
+  ARP lookups: the node reaches HA, but HA gets `OSError 113: No route to
+  host` connecting to the node, even on the same subnet. The installer
+  disables it permanently via NetworkManager.
+- mDNS records must carry the node's IPv4 address (HA drops address-less
+  services), and HA prefers IPv4 when connecting (IPv6 link-local addresses
+  need brackets and often aren't routable).
+
 ## Roadmap
 
 - **Manual node setup** (pinned). Adding a node shouldn't depend on mDNS
