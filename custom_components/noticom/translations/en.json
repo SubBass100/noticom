@@ -5,17 +5,24 @@
       "adopt": {
         "title": "Adopt Noticom node",
         "description": "Adopt node **{node_id}**? After you press Submit, the node chirps. Press its button within 60 seconds to confirm."
+      },
+      "user": {
+        "title": "Add a Noticom node",
+        "description": "Nodes on your network usually appear automatically under Discovered. If one doesn't, enter its IP address (run hostname -I on the Pi, or look for \"advertising as … on <address>\" in its log).",
+        "data": {
+          "host": "IP address"
+        }
       }
     },
     "error": {
       "button_timeout": "The node's button wasn't pressed within 60 seconds. Try again.",
       "cannot_connect": "Couldn't reach the node.",
       "invalid_reply": "The node's reply failed verification.",
-      "no_internal_url": "Home Assistant has no local URL configured (Settings → System → Network)."
+      "no_internal_url": "Home Assistant has no local URL configured (Settings → System → Network).",
+      "unreachable": "No unclaimed Noticom node answered at that address. Check that the node software is running and the node isn't already adopted (a node adopted by another Home Assistant needs a factory reset first)."
     },
     "abort": {
       "already_configured": "This node is already adopted.",
-      "discovery_only": "Noticom nodes are added automatically when they're discovered on your network. Install the node software on a Raspberry Pi to get started. (Adding a node by IP address is planned.)",
       "invalid_discovery": "The discovered node didn't report a node ID."
     }
   },

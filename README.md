@@ -13,8 +13,7 @@ Raspberry Pi nodes with a ReSpeaker 2-Mic HAT, a small speaker and a button.
 
 > **Status: early, feature-complete.** Adoption, the live node connection,
 > per-node settings, chimes, the push-to-talk intercom and the Noticom
-> sidebar panel all work. Admin defaults in the panel and adding nodes by
-> IP address are planned.
+> sidebar panel all work. Admin defaults in the panel are planned.
 
 ## Repos
 
@@ -30,8 +29,9 @@ Design decisions and the wire protocol live in [docs/DESIGN.md](docs/DESIGN.md).
    as an **Integration**.
 2. Install **Noticom** and restart Home Assistant.
 3. Install `noticom-node` on a Pi. It appears under Settings → Devices &
-   services as a discovered device; click **Adopt** and press the node's
-   button within 60 seconds.
+   services as a discovered device; click **Add**, then **Submit**, and press
+   the node's button within 60 seconds. If it doesn't appear, use **Add
+   integration → Noticom** and enter the Pi's IP address instead.
 
 ## Chimes
 

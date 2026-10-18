@@ -14,6 +14,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
+from homeassistant.const import CONF_HOST
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError, get_url
@@ -56,6 +57,14 @@ def _url_host(discovery_info: ZeroconfServiceInfo) -> str:
     return f"[{addresses[0]}]"
 
 
+def _bracket(host: str) -> str:
+    """Wrap a bare IPv6 address in brackets for use in a URL."""
+    host = host.strip()
+    if ":" in host and not host.startswith("["):
+        return f"[{host}]"
+    return host
+
+
 class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle adoption of a Noticom node. One config entry per node."""
 
@@ -88,8 +97,40 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Nodes are added by discovery only."""
-        return self.async_abort(reason="discovery_only")
+        """Add a node by IP address, for when discovery doesn't find it."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host = _bracket(user_input[CONF_HOST])
+            node_id = await self._async_fetch_node_id(host)
+            if node_id is None:
+                errors["base"] = "unreachable"
+            else:
+                await self.async_set_unique_id(node_id, raise_on_progress=False)
+                self._abort_if_unique_id_configured()
+                self._host = host
+                self._node_id = node_id
+                self.context["title_placeholders"] = {"node_id": node_id}
+                return await self.async_step_adopt()
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({vol.Required(CONF_HOST): str}),
+            errors=errors,
+        )
+
+    async def _async_fetch_node_id(self, host: str) -> str | None:
+        """Ask an unclaimed node at `host` for its id (GET /info)."""
+        session = async_get_clientsession(self.hass)
+        url = f"http://{host}:{NODE_ADOPT_PORT}/info"
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status != 200:
+                    return None
+                body = await resp.json(content_type=None)
+        except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+            _LOGGER.info("No unclaimed Noticom node at %s: %r", url, err)
+            return None
+        node_id = body.get("node_id") if isinstance(body, dict) else None
+        return node_id if isinstance(node_id, str) and node_id else None
 
     async def async_step_adopt(
         self, user_input: dict[str, Any] | None = None
