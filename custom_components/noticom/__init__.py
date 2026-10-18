@@ -1,8 +1,8 @@
 """The Noticom notification and intercom integration.
 
-Status: discovery, adoption, the node control channel and chimes work.
-The sidebar panel manages chimes. Still to build: push-to-talk clips,
-routing and admin settings in the panel, and media_player entities.
+Status: discovery, adoption, the node control channel, chimes, the
+push-to-talk intercom and the sidebar panel work. Still to build: admin
+defaults in the panel and media_player entities.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import CHIME_SCAN_INTERVAL_S, CONF_NODE_ID, CONF_NODE_PUBKEY, DOMAIN
-from .files import NoticomChimeView
+from .files import NoticomChimeView, NoticomClipUploadView, NoticomClipView
 from .hub import NoticomHub
 from .identity import async_get_server_key
 from .panel import async_setup_panel
@@ -47,6 +47,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await async_get_server_key(hass)
     hub = hass.data[DOMAIN] = NoticomHub(hass)
     await hub.chimes.async_scan()
+    await hub.intercom.async_load()
 
     async def _rescan(_now) -> None:
         if await hub.chimes.async_scan():
@@ -55,6 +56,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_track_time_interval(hass, _rescan, timedelta(seconds=CHIME_SCAN_INTERVAL_S))
     hass.http.register_view(NoticomWebSocketView())
     hass.http.register_view(NoticomChimeView())
+    hass.http.register_view(NoticomClipUploadView())
+    hass.http.register_view(NoticomClipView())
     async_setup_services(hass)
     await async_setup_panel(hass)
     return True

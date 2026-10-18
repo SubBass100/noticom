@@ -48,7 +48,7 @@ async def test_wav_and_mp3_are_normalized_to_mono(hass, chime_dir, tmp_path):
     hub = await load(hass)
 
     names = [c.name for c in hub.chimes.chimes]
-    assert names == ["doorbell", "Mailbox"]
+    assert names == ["doorbell", "intercom", "Mailbox"]  # intercom: the default
     for chime in hub.chimes.chimes:
         peak, channels = peak_and_channels(chime.path)
         assert channels == 1
@@ -61,7 +61,7 @@ async def test_broken_file_is_skipped(hass, chime_dir):
     (chime_dir / "broken.mp3").write_bytes(b"not audio")
     write_wav(chime_dir / "entry.wav")
     hub = await load(hass)
-    assert [c.name for c in hub.chimes.chimes] == ["entry"]
+    assert [c.name for c in hub.chimes.chimes] == ["entry", "intercom"]
 
 
 async def test_reload_picks_up_changes_and_tells_nodes(
@@ -72,16 +72,16 @@ async def test_reload_picks_up_changes_and_tells_nodes(
     client = await hass_client_no_auth()
     ws = await client.ws_connect("/api/noticom/ws")
     welcome, _ = await handshake(ws, node_key)
-    assert [c["name"] for c in welcome["chimes"]] == ["entry"]
+    assert [c["name"] for c in welcome["chimes"]] == ["entry", "intercom"]
 
     write_wav(chime_dir / "exit.wav", amp=0.3)
     (chime_dir / "entry.wav").unlink()
     await hass.services.async_call(DOMAIN, "reload_chimes", blocking=True)
     msg = protocol.decode((await ws.receive(timeout=2)).data)
     assert msg["t"] == "chimes"
-    assert [c["name"] for c in msg["chimes"]] == ["exit"]
+    assert [c["name"] for c in msg["chimes"]] == ["exit", "intercom"]
     # Old cache file pruned.
-    assert len(list(hub.chimes.cache.glob("*.wav"))) == 1
+    assert len(list(hub.chimes.cache.glob("*.wav"))) == 2
     await ws.close()
 
 
@@ -146,7 +146,7 @@ async def test_play_chime_targets_and_reports(
 async def test_play_unknown_chime_errors(hass, chime_dir, node_entry):
     write_wav(chime_dir / "doorbell.wav")
     await load(hass)
-    with pytest.raises(ServiceValidationError, match="Available: doorbell"):
+    with pytest.raises(ServiceValidationError, match="Available: doorbell, intercom"):
         await hass.services.async_call(DOMAIN, "play_chime", {"chime": "nope"}, blocking=True)
 
 

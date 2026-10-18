@@ -11,9 +11,10 @@ Raspberry Pi nodes with a ReSpeaker 2-Mic HAT, a small speaker and a button.
 - Adopt nodes from the HA UI with a physical button-press confirmation; each
   node is bonded to your HA with an Ed25519 keypair.
 
-> **Status: early.** Adoption, the live node connection, per-node settings,
-> chimes and the Noticom sidebar panel (chime upload, preview and delete)
-> work. The push-to-talk intercom is next.
+> **Status: early, feature-complete.** Adoption, the live node connection,
+> per-node settings, chimes, the push-to-talk intercom and the Noticom
+> sidebar panel all work. Admin defaults in the panel and adding nodes by
+> IP address are planned.
 
 ## Repos
 
@@ -69,6 +70,34 @@ actions:
 Each node plays one thing at a time with up to 5 waiting; chimes go ahead
 of waiting intercom messages. Offline nodes are skipped (the action's
 response lists which). **Noticom: Stop** stops playback and clears the queue.
+
+## Intercom
+
+Hold a node's button: after a short chirp, talk (up to 45 seconds), then
+let go. The message plays on every node that node is allowed to talk to,
+after the intercom chime. Quick taps don't record anything, and a low tone
+means the message couldn't be sent.
+
+In the **Noticom** panel's **Intercom** tab you choose the intercom chime
+(a default `intercom` chime is created on first start; pick any chime or
+none), set who each node can talk to (all nodes, or only selected ones),
+and play back the last 10 messages from the past hour with their delivery
+status. Each node's **Push to talk** switch turns its button off.
+
+Every message fires a `noticom_message` event (`sender`, `sender_device_id`,
+`recipients`, `offline`, `duration`), so automations can react:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: noticom_message
+    event_data:
+      sender: Garage
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.kitchen
+```
 
 ## Development
 

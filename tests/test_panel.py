@@ -41,7 +41,7 @@ async def test_list_chimes(hass, panel, hass_ws_client):
     await ws.send_json({"id": 1, "type": "noticom/chimes/list"})
     res = await ws.receive_json()
     assert res["success"]
-    assert [c["name"] for c in res["result"]["chimes"]] == ["doorbell"]
+    assert [c["name"] for c in res["result"]["chimes"]] == ["doorbell", "intercom"]
     assert res["result"]["chimes"][0]["file"] == "doorbell.wav"
     assert res["result"]["chimes"][0]["duration"] == pytest.approx(0.2, abs=0.01)
 
@@ -74,7 +74,7 @@ async def test_upload_preview_replace_delete(hass, panel, hass_client, hass_ws_c
     await ws.send_json({"id": 1, "type": "noticom/chimes/delete", "name": "Front door"})
     res = await ws.receive_json()
     assert res["success"]
-    assert [c["name"] for c in res["result"]["chimes"]] == ["doorbell"]
+    assert [c["name"] for c in res["result"]["chimes"]] == ["doorbell", "intercom"]
     assert not (panel / "Front door.wav").exists()
 
 
@@ -91,7 +91,7 @@ async def test_upload_rejects_bad_input(hass, panel, hass_client, name, data, fi
     resp = await client.post(UPLOAD, data=form(name, data, filename=filename))
     assert resp.status == 400
     assert error in (await resp.json())["error"]
-    assert sorted(p.name for p in panel.iterdir()) == ["doorbell.wav"]
+    assert sorted(p.name for p in panel.iterdir()) == ["doorbell.wav", "intercom.wav"]
 
 
 async def test_non_admin_is_refused(

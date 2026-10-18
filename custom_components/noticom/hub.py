@@ -96,6 +96,9 @@ class NoticomHub:
         self.hass = hass
         self.links: dict[str, NodeLink] = {}
         self.chimes = ChimeStore(hass)
+        from .intercom import Intercom  # noqa: PLC0415 - avoids an import cycle
+
+        self.intercom = Intercom(hass, self)
 
     async def async_broadcast_chimes(self) -> None:
         """Send the current chime list to every connected node."""

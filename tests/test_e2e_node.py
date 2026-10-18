@@ -5,6 +5,7 @@ Skipped unless the node package is importable (pip install -e ../noticom-node).
 
 import asyncio
 
+import numpy as np
 import pytest
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -174,3 +175,71 @@ async def test_chime_syncs_and_plays_on_node(hass, hass_client_no_auth, tmp_path
     finally:
         task.cancel()
         playback.cancel()
+
+
+async def test_intercom_message_between_two_real_nodes(hass, hass_client_no_auth, tmp_path):
+    """Hallway records and sends; Kitchen plays the intercom chime, then the message."""
+    import hashlib
+
+    from noticom_node.audio import process_recording
+    from noticom_node.chimecache import ChimeCache
+    from noticom_node.player import Player
+
+    hass.config.config_dir = str(tmp_path / "ha")
+    (tmp_path / "ha" / "noticom" / "chimes").mkdir(parents=True)
+
+    nodes = {}
+    for name in ("Hallway", "Kitchen"):
+        state = node_state.NodeState(tmp_path / name)
+        MockConfigEntry(
+            domain=DOMAIN, unique_id=state.node_id, title=name,
+            data={CONF_NODE_ID: state.node_id, CONF_NODE_PUBKEY: protocol.public_key_b64(state.key)},
+        ).add_to_hass(hass)
+        nodes[name] = state
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+    client = await hass_client_no_auth()
+    pairing = node_state.Pairing(
+        protocol.public_key_b64(await async_get_server_key(hass)),
+        str(client.make_url("")).rstrip("/"),
+    )
+
+    heard: list[bytes] = []
+    done = asyncio.Event()
+
+    async def kitchen_speaker(path):
+        heard.append(path.read_bytes())
+        if len(heard) == 2:
+            done.set()
+
+    kitchen_cache = ChimeCache(tmp_path / "kcache")
+    kitchen_player = Player(kitchen_cache, kitchen_speaker)
+    hall_player = Player(ChimeCache(tmp_path / "hcache"), kitchen_speaker)
+    tasks = [asyncio.create_task(kitchen_player.run()), asyncio.create_task(hall_player.run())]
+    hall_fake, kit_fake = FakeNode(), FakeNode()
+    hall = control.ControlClient(nodes["Hallway"], pairing, hall_fake.apply, player=hall_player)
+    kit = control.ControlClient(
+        nodes["Kitchen"], pairing, kit_fake.apply, player=kitchen_player, cache=kitchen_cache
+    )
+    tasks += [asyncio.create_task(hall.run()), asyncio.create_task(kit.run())]
+    try:
+        await hall_fake.next_config()
+        await kit_fake.next_config()
+
+        # What the Hallway node would upload after a 1 s hold (stereo capture -> mono WAV).
+        t = np.arange(16000) / 16000
+        stereo = np.repeat((0.05 * np.sin(2 * np.pi * 300 * t) * 32767).astype("<i2"), 2)
+        message = process_recording(stereo.tobytes())
+        assert await hall.upload_clip(message)
+
+        await asyncio.wait_for(done.wait(), 5)
+        intercom = hass.data[DOMAIN].chimes.get("intercom")
+        assert hashlib.sha256(heard[0]).hexdigest() == intercom.hash  # the chime first
+        assert heard[1] == message  # then the message, byte for byte
+        await asyncio.sleep(0.1)
+        recent = hass.data[DOMAIN].intercom.recent()
+        assert recent[0]["sender"] == "Hallway"
+        assert recent[0]["recipients"] == [{"name": "Kitchen", "status": "done"}]
+    finally:
+        for task in tasks:
+            task.cancel()

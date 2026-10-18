@@ -18,9 +18,12 @@ from homeassistant.components.http import (
 )
 from homeassistant.core import HomeAssistant, callback
 
+from homeassistant.config_entries import ConfigEntryState
+
 from .chimes import MAX_UPLOAD_BYTES, ChimeError
-from .const import DOMAIN
-from .hub import NoticomHub
+from .const import CONF_INTERCOM_TARGETS, CONF_NODE_ID, CONF_PTT_ENABLED, DOMAIN
+from .hub import NoticomHub, node_options
+from .intercom import TARGETS_ALL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +31,7 @@ PANEL_URL = "noticom"
 STATIC_URL = "/noticom_static"
 UPLOAD_PATH = "/api/noticom/panel/chimes"
 PREVIEW_PATH = "/api/noticom/panel/chime/{chime_hash}"
+CLIP_PREVIEW_PATH = "/api/noticom/panel/clip/{clip_id}"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 
@@ -48,8 +52,12 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     )
     hass.http.register_view(ChimeUploadView())
     hass.http.register_view(ChimePreviewView())
+    hass.http.register_view(ClipPreviewView())
     websocket_api.async_register_command(hass, ws_list_chimes)
     websocket_api.async_register_command(hass, ws_delete_chime)
+    websocket_api.async_register_command(hass, ws_intercom_get)
+    websocket_api.async_register_command(hass, ws_intercom_set_chime)
+    websocket_api.async_register_command(hass, ws_intercom_set_targets)
 
 
 def chime_list(hub: NoticomHub) -> list[dict[str, Any]]:
@@ -152,3 +160,98 @@ async def ws_delete_chime(hass: HomeAssistant, connection, msg: dict) -> None:
     await hub.async_broadcast_chimes()
     _LOGGER.info("Chime %s deleted", msg["name"])
     connection.send_result(msg["id"], {"chimes": chime_list(hub)})
+
+
+class ClipPreviewView(HomeAssistantView):
+    """GET a recent intercom message for the panel's play button."""
+
+    url = CLIP_PREVIEW_PATH
+    name = "api:noticom:panel:clip"
+    requires_auth = True
+
+    async def get(self, request: web.Request, clip_id: str) -> web.Response:
+        if (denied := _require_admin(request)) is not None:
+            return denied
+        clip = request.app[KEY_HASS].data[DOMAIN].intercom.get(clip_id)
+        if clip is None:
+            return web.Response(status=404)
+        return web.Response(body=clip.data, content_type="audio/wav")
+
+
+def intercom_state(hass: HomeAssistant) -> dict[str, Any]:
+    """Everything the Intercom tab shows."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    nodes = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.state is not ConfigEntryState.LOADED:
+            continue
+        opts = node_options(entry)
+        node_id = entry.data[CONF_NODE_ID]
+        nodes.append(
+            {
+                "node_id": node_id,
+                "name": entry.title,
+                "connected": hub.is_connected(node_id),
+                "ptt_enabled": opts[CONF_PTT_ENABLED],
+                "targets": entry.options.get(CONF_INTERCOM_TARGETS, TARGETS_ALL),
+            }
+        )
+    nodes.sort(key=lambda n: n["name"].lower())
+    return {
+        "chime": hub.intercom.chime_name,
+        "chimes": [c.name for c in hub.chimes.chimes],
+        "nodes": nodes,
+        "messages": hub.intercom.recent(),
+    }
+
+
+@websocket_api.websocket_command({vol.Required("type"): "noticom/intercom/get"})
+@websocket_api.require_admin
+@callback
+def ws_intercom_get(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Intercom settings, nodes and recent messages."""
+    connection.send_result(msg["id"], intercom_state(hass))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "noticom/intercom/set_chime", vol.Required("chime"): vol.Any(None, str)}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_intercom_set_chime(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Choose the chime played before intercom messages (null for none)."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    name = msg["chime"]
+    if name is not None:
+        chime = hub.chimes.get(name)
+        if chime is None:
+            connection.send_error(msg["id"], "not_found", f"No chime named {name!r}.")
+            return
+        name = chime.name
+    await hub.intercom.async_set_chime(name)
+    connection.send_result(msg["id"], intercom_state(hass))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "noticom/intercom/set_targets",
+        vol.Required("node_id"): str,
+        vol.Required("targets"): vol.Any(TARGETS_ALL, [str]),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_intercom_set_targets(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Set which nodes a node's button talks to ("all" or a list of node ids)."""
+    entry = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, msg["node_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "No such node.")
+        return
+    targets = msg["targets"]
+    if targets != TARGETS_ALL:
+        known = {e.data[CONF_NODE_ID] for e in hass.config_entries.async_entries(DOMAIN)}
+        targets = sorted(set(targets) & known - {msg["node_id"]})
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_INTERCOM_TARGETS: targets}
+    )
+    connection.send_result(msg["id"], intercom_state(hass))

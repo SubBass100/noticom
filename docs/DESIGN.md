@@ -74,6 +74,29 @@ message; nodes download missing hashes with signed requests, verify the
 hash, and delete unlisted ones (cache: `/var/cache/noticom/chimes`). A play
 for a chime a node hasn't synced yet is fetched on demand.
 
+### Intercom
+
+- **Node:** a press must last 0.25 s before anything happens (so the reset
+  gesture's taps stay silent); then the node chirps, *then* starts
+  `arecord` (16 kHz stereo) so the chirp isn't captured. Release or 45 s
+  stops it. Under 0.5 s is discarded. The recording is averaged to mono,
+  normalized and `POST`ed to `/api/noticom/clip` (signed). Failure → low
+  tone. The player won't start new jobs while recording. Push-to-talk only
+  runs once paired, and is suspended during the reset confirmation.
+- **HA:** rejects clips from nodes with Push to talk off (403), non-WAV or
+  over 3 MB / 46 s (400). Targets are the sender's `intercom_targets`
+  option (`"all"` default, or a list of node ids), loaded entries only,
+  never the sender. Each connected target gets
+  `play {kind: "clip", clip_url, pre_chime_hash}`; offline ones are recorded
+  as `offline`. Clips stay in memory (last 10, up to 1 h) for delivery and
+  the panel; `GET /api/noticom/clip/{id}` (signed) only serves a clip to
+  nodes it was sent to. Job reports update each recipient's status. A
+  `noticom_message` event is fired. The intercom chime is a global setting
+  in `.storage/noticom.settings`; a default `intercom` chime (rising
+  G5→C6) is written to the chimes folder once, on first start.
+- **Node playback:** fetch the clip first, play the pre-chime (a missing
+  chime doesn't block the message), then the message.
+
 ### Sidebar panel
 
 `Noticom` in the sidebar (admin only) is a plain web component
@@ -86,9 +109,13 @@ API, all admin-only:
 | `POST /api/noticom/panel/chimes` (multipart `file`, `name`, `replace`) | Upload; names are letters, digits, spaces, `-`, `_` (max 48); 10 MB cap; the file is converted before it replaces anything |
 | `GET /api/noticom/panel/chime/{hash}` | Normalized WAV for the browser preview |
 | WS `noticom/chimes/delete` (`name`) | Delete the chime's file |
+| WS `noticom/intercom/get` | Intercom chime, chime names, nodes (online, PTT, targets), recent messages |
+| WS `noticom/intercom/set_chime` (`chime` or null) | Choose the intercom chime |
+| WS `noticom/intercom/set_targets` (`node_id`, `targets`: `"all"` or ids) | Who a node can talk to |
+| `GET /api/noticom/panel/clip/{id}` | A recent message, for browser playback |
 
-"Play on nodes" calls `noticom.play_chime` with no target. Routing and admin
-defaults will join the panel with the intercom.
+Tabs: **Chimes** and **Intercom**. The Intercom tab refreshes every 10 s
+while open. "Play on nodes" calls `noticom.play_chime` with no target.
 
 Per-node settings editable from HA: name, hostname, DHCP or static IP, audio
 output device, volume, mic gain and boost, button GPIO pin and type

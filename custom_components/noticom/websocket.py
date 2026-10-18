@@ -141,8 +141,11 @@ class NoticomWebSocketView(HomeAssistantView):
                 _LOGGER.warning(
                     "Node %s couldn't apply config: %s", link.node_id, data.get("reason")
                 )
+        elif msg_type == protocol.T_PTT:
+            _LOGGER.debug("Node %s PTT %s", link.node_id, data.get("phase"))
         elif msg_type == protocol.T_JOB:
             status = data.get("status")
+            hub.intercom.job_update(link.node_id, data.get("job_id", ""), status)
             log = _LOGGER.debug if status in ("started", "done") else _LOGGER.info
             log("Node %s job %s: %s", link.node_id, data.get("job_id"), status)
         else:

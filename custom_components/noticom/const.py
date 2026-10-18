@@ -33,6 +33,7 @@ CONF_MIC_BOOST = "mic_boost"
 CONF_PTT_ENABLED = "ptt_enabled"
 CONF_BUTTON_PIN = "button_pin"
 CONF_BUTTON_NC = "button_nc"
+CONF_INTERCOM_TARGETS = "intercom_targets"  # "all" or a list of node ids
 
 # Storage.
 STORAGE_VERSION = 1
@@ -43,7 +44,7 @@ CHIME_SCAN_INTERVAL_S = 30
 
 # Behaviour.
 MAX_CLIP_SECONDS = 45
-CLIP_TTL_S = 600
+CLIP_TTL_S = 3600  # recent messages kept in memory (last 10) for up to an hour
 ADOPT_TIMEOUT_S = 75  # node waits 60 s for a button press; allow for latency
 
 # Admin defaults.
@@ -54,6 +55,10 @@ DEFAULT_VOLUME = 100
 DEFAULT_MIC_GAIN = 90
 DEFAULT_MIC_BOOST = 3
 DEFAULT_PTT_ENABLED = True
+DEFAULT_INTERCOM_CHIME = "intercom"
+
+# Events.
+EVENT_MESSAGE = "noticom_message"
 
 PLATFORMS = ["binary_sensor", "number", "switch"]
 
