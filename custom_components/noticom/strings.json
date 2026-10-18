@@ -22,7 +22,7 @@
     },
     "error": {
       "button_timeout": "The node's button wasn't pressed within 60 seconds. Try again.",
-      "cannot_connect": "Couldn't reach the node.",
+      "cannot_connect": "Couldn't reach the node. If you reinstalled or reflashed this Pi, this card may be left over from before and point at an old address: close it, click Ignore on any older Noticom cards, and add the node with Add integration → Noticom using the address from `hostname -I` on the Pi.",
       "invalid_reply": "The node's reply failed verification.",
       "no_internal_url": "Home Assistant has no local URL configured (Settings → System → Network).",
       "unreachable": "No unclaimed Noticom node answered at that address. Check that the node software is running and the node isn't already adopted (a node adopted by another Home Assistant needs a factory reset first)."
