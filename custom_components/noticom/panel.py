@@ -9,7 +9,7 @@ from typing import Any
 import voluptuous as vol
 from aiohttp import web
 
-from homeassistant.components import panel_custom, websocket_api
+from homeassistant.components import frontend, panel_custom, websocket_api
 from homeassistant.components.http import (
     KEY_HASS,
     KEY_HASS_USER,
@@ -41,12 +41,20 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)]
     )
+    # Load the Noticom icon set on every page so the sidebar can show it.
+    icons_version = (FRONTEND_DIR / "noticom-icons.js").stat().st_mtime_ns
+    sidebar_icon = "mdi:bullhorn-variant"
+    try:
+        frontend.add_extra_js_url(hass, f"{STATIC_URL}/noticom-icons.js?v={icons_version}")
+        sidebar_icon = "noticom:logo"
+    except KeyError:  # frontend not loaded (e.g. in tests): keep the stock icon
+        _LOGGER.debug("Frontend not loaded; using the default sidebar icon")
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL,
         webcomponent_name="noticom-panel",
         sidebar_title="Noticom",
-        sidebar_icon="mdi:bullhorn-variant",
+        sidebar_icon=sidebar_icon,
         module_url=f"{STATIC_URL}/noticom-panel.js?v={version}",
         require_admin=True,
     )
