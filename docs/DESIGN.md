@@ -53,9 +53,27 @@ Each adopted node is an HA device with:
 
 Actions:
 
-- `noticom.play_chime` — `chime` name, targets devices/areas (or all nodes).
-- `noticom.broadcast` — play an arbitrary audio file on target nodes.
+- `noticom.play_chime` — `chime` name; target devices, entities, areas,
+  floors or labels, or nothing for every node. Returns `played`/`offline`
+  node lists as an optional response.
 - `noticom.stop` — stop playback and clear queues on target nodes.
+- `noticom.reload_chimes` — rescan the chime folder now.
+- `noticom.broadcast` (planned) — play an arbitrary audio file on target nodes.
+
+### Chimes
+
+Chimes are general-purpose named notification sounds (mailbox, doorbell,
+entry, exit, ...), not tied to any one automation. They live in
+`/config/noticom/chimes/`; the file name without extension is the name
+(matched case-insensitively). Every 30 s (and on `reload_chimes`) the folder
+is rescanned: each WAV/MP3 is decoded (WAV natively, MP3 via ffmpeg),
+mixed to mono, DC-offset removed, peak-normalized to about -1 dBFS (boost
+capped at +20 dB) and cached as 16-bit WAV in `/config/noticom/.cache/`
+named by SHA-256. Changes are pushed to connected nodes as a `chimes`
+message; nodes download missing hashes with signed requests, verify the
+hash, and delete unlisted ones (cache: `/var/cache/noticom/chimes`). A play
+for a chime a node hasn't synced yet is fetched on demand. The sidebar
+panel (planned) will manage the same folder.
 
 Per-node settings editable from HA: name, hostname, DHCP or static IP, audio
 output device, volume, mic gain and boost, button GPIO pin and type

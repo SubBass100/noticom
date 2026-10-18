@@ -3,17 +3,16 @@
 Notification chimes and push-to-talk intercom for Home Assistant, using
 Raspberry Pi nodes with a ReSpeaker 2-Mic HAT, a small speaker and a button.
 
-- Play chimes (WAV/MP3) on chosen nodes from any automation, e.g. a doorbell
-  playing "dingdong" everywhere.
+- Play named notification chimes (WAV/MP3) on chosen nodes from any
+  automation: a mailbox chime in the kitchen, a doorbell everywhere, entry
+  and exit chimes by the door.
 - Hold a node's button to record a message (up to 45 s); release to send it to
   the nodes it's allowed to reach, announced by a chime.
 - Adopt nodes from the HA UI with a physical button-press confirmation; each
   node is bonded to your HA with an Ed25519 keypair.
 
-> **Status: early.** Discovery, adoption and the live node connection work:
-> each node shows up with Connected, Volume, Mic gain, Mic boost and Push to
-> talk entities, and its button wiring is under Configure. Chimes, the
-> panel and the intercom itself are next.
+> **Status: early.** Adoption, the live node connection, per-node settings
+> and chimes work. The push-to-talk intercom and the sidebar panel are next.
 
 ## Repos
 
@@ -31,6 +30,41 @@ Design decisions and the wire protocol live in [docs/DESIGN.md](docs/DESIGN.md).
 3. Install `noticom-node` on a Pi. It appears under Settings → Devices &
    services as a discovered device; click **Adopt** and press the node's
    button within 60 seconds.
+
+## Chimes
+
+Put WAV or MP3 files in **`/config/noticom/chimes/`** (the folder is created
+on first start; use the File editor add-on's upload button or Samba). The
+file name without its extension is the chime's name, so `mailbox.mp3` is
+the chime `mailbox`. Noticom notices new, changed and deleted files within
+30 seconds (or run **Noticom: Reload chimes**), normalizes them to a
+consistent loudness, and copies them to every node ahead of time so they
+play instantly.
+
+Play one from any automation with **Noticom: Play chime**. Target nodes by
+device, entity or area, or leave the target empty for every node:
+
+```yaml
+# Mail's here: chime in the kitchen and office.
+actions:
+  - action: noticom.play_chime
+    target:
+      area_id: [kitchen, office]
+    data:
+      chime: mailbox
+```
+
+```yaml
+# Front door opened: entry chime everywhere.
+actions:
+  - action: noticom.play_chime
+    data:
+      chime: entry
+```
+
+Each node plays one thing at a time with up to 5 waiting; chimes go ahead
+of waiting intercom messages. Offline nodes are skipped (the action's
+response lists which). **Noticom: Stop** stops playback and clears the queue.
 
 ## Development
 

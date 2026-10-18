@@ -1,0 +1,21 @@
+play_chime:
+  target:
+    device:
+      integration: noticom
+    entity:
+      integration: noticom
+  fields:
+    chime:
+      required: true
+      example: doorbell
+      selector:
+        text:
+
+stop:
+  target:
+    device:
+      integration: noticom
+    entity:
+      integration: noticom
+
+reload_chimes:

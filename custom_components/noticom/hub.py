@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from . import protocol
+from .chimes import ChimeStore
 from .const import (
     CONF_BUTTON_NC,
     CONF_BUTTON_PIN,
@@ -94,6 +95,13 @@ class NoticomHub:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self.links: dict[str, NodeLink] = {}
+        self.chimes = ChimeStore(hass)
+
+    async def async_broadcast_chimes(self) -> None:
+        """Send the current chime list to every connected node."""
+        manifest = self.chimes.manifest()
+        for link in list(self.links.values()):
+            await link.send(protocol.T_CHIMES, chimes=manifest)
 
     def is_connected(self, node_id: str) -> bool:
         """Whether a node has a live, authenticated connection."""

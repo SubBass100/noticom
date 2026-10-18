@@ -112,3 +112,65 @@ async def test_node_rejects_impostor_server(hass, setup):
     assert node.configs == []  # welcome refused: server signature didn't verify
     assert not task.done()  # keeps retrying, doesn't give up or reset
     task.cancel()
+
+
+async def test_chime_syncs_and_plays_on_node(hass, hass_client_no_auth, tmp_path):
+    """The whole chime path: folder -> HA -> signed download -> node queue -> speaker."""
+    import hashlib
+
+    from noticom_node.chimecache import ChimeCache
+    from noticom_node.player import Player
+
+    from .audio_fixtures import write_wav
+
+    hass.config.config_dir = str(tmp_path / "ha")
+    folder = tmp_path / "ha" / "noticom" / "chimes"
+    folder.mkdir(parents=True)
+    write_wav(folder / "mailbox.wav")
+
+    state = node_state.NodeState(tmp_path / "node")
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=state.node_id, title="Hallway",
+        data={CONF_NODE_ID: state.node_id, CONF_NODE_PUBKEY: protocol.public_key_b64(state.key)},
+    )
+    entry.add_to_hass(hass)
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+    client = await hass_client_no_auth()
+    pairing = node_state.Pairing(
+        protocol.public_key_b64(await async_get_server_key(hass)),
+        str(client.make_url("")).rstrip("/"),
+    )
+
+    cache = ChimeCache(tmp_path / "cache")
+    played = []
+    finished = asyncio.Event()
+
+    async def speaker(path):
+        played.append(path.read_bytes())
+        finished.set()
+
+    player = Player(cache, speaker)
+    playback = asyncio.create_task(player.run())
+    node = FakeNode()
+    task = asyncio.create_task(
+        control.ControlClient(state, pairing, node.apply, player=player, cache=cache).run()
+    )
+    try:
+        await node.next_config()
+        chime = hass.data[DOMAIN].chimes.get("mailbox")
+        for _ in range(50):  # wait for the background sync
+            if cache.path(chime.hash):
+                break
+            await asyncio.sleep(0.05)
+        assert cache.path(chime.hash) is not None
+
+        result = await hass.services.async_call(
+            DOMAIN, "play_chime", {"chime": "mailbox"}, blocking=True, return_response=True
+        )
+        assert result["played"] == ["Hallway"]
+        await asyncio.wait_for(finished.wait(), 3)
+        assert hashlib.sha256(played[0]).hexdigest() == chime.hash
+    finally:
+        task.cancel()
+        playback.cancel()

@@ -122,7 +122,7 @@ class NoticomWebSocketView(HomeAssistantView):
                 protocol.T_WELCOME,
                 sig=server_sig,
                 config=node_config(entry),
-                chimes=[],  # TODO: chime manifest
+                chimes=hass.data[DOMAIN].chimes.manifest(),
             )
         )
         return link
@@ -141,5 +141,9 @@ class NoticomWebSocketView(HomeAssistantView):
                 _LOGGER.warning(
                     "Node %s couldn't apply config: %s", link.node_id, data.get("reason")
                 )
+        elif msg_type == protocol.T_JOB:
+            status = data.get("status")
+            log = _LOGGER.debug if status in ("started", "done") else _LOGGER.info
+            log("Node %s job %s: %s", link.node_id, data.get("job_id"), status)
         else:
             _LOGGER.debug("Node %s sent unhandled %s", link.node_id, msg_type)

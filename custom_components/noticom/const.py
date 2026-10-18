@@ -38,6 +38,8 @@ CONF_BUTTON_NC = "button_nc"
 STORAGE_VERSION = 1
 STORAGE_KEY = "noticom"
 CHIME_DIR = "noticom/chimes"  # relative to the HA config dir
+CHIME_CACHE_DIR = "noticom/.cache"  # normalized copies, named by hash
+CHIME_SCAN_INTERVAL_S = 30
 
 # Behaviour.
 MAX_CLIP_SECONDS = 45
@@ -59,3 +61,5 @@ PLATFORMS = ["binary_sensor", "number", "switch"]
 SERVICE_PLAY_CHIME = "play_chime"
 SERVICE_BROADCAST = "broadcast"
 SERVICE_STOP = "stop"
+SERVICE_RELOAD_CHIMES = "reload_chimes"
+ATTR_CHIME = "chime"

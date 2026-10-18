@@ -1,23 +1,27 @@
 """The Noticom notification and intercom integration.
 
-Status: discovery, adoption and the node control channel (docs/DESIGN.md
-§1-2) work. Still to build: file endpoints (§3), chime storage and the
-sidebar panel, the actions in const.py, and media_player entities.
+Status: discovery, adoption, the node control channel and chimes work.
+Still to build: push-to-talk clips, the sidebar panel and media_player
+entities.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_NODE_ID, CONF_NODE_PUBKEY, DOMAIN
+from .const import CHIME_SCAN_INTERVAL_S, CONF_NODE_ID, CONF_NODE_PUBKEY, DOMAIN
+from .files import NoticomChimeView
 from .hub import NoticomHub
 from .identity import async_get_server_key
+from .services import async_setup_services
 from .websocket import NoticomWebSocketView
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -40,8 +44,17 @@ type NoticomConfigEntry = ConfigEntry[NodeRuntime]
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up integration-wide pieces shared by all nodes."""
     await async_get_server_key(hass)
-    hass.data[DOMAIN] = NoticomHub(hass)
+    hub = hass.data[DOMAIN] = NoticomHub(hass)
+    await hub.chimes.async_scan()
+
+    async def _rescan(_now) -> None:
+        if await hub.chimes.async_scan():
+            await hub.async_broadcast_chimes()
+
+    async_track_time_interval(hass, _rescan, timedelta(seconds=CHIME_SCAN_INTERVAL_S))
     hass.http.register_view(NoticomWebSocketView())
+    hass.http.register_view(NoticomChimeView())
+    async_setup_services(hass)
     return True
 
 

@@ -57,5 +57,25 @@
         "name": "Push to talk"
       }
     }
+  },
+  "services": {
+    "play_chime": {
+      "name": "Play chime",
+      "description": "Plays a chime on Noticom nodes. Target nodes, or leave the target empty to play on all of them.",
+      "fields": {
+        "chime": {
+          "name": "Chime",
+          "description": "Chime name: a file name from /config/noticom/chimes without its extension, e.g. doorbell for doorbell.mp3."
+        }
+      }
+    },
+    "stop": {
+      "name": "Stop",
+      "description": "Stops playback and clears the queue on Noticom nodes (all of them if no target)."
+    },
+    "reload_chimes": {
+      "name": "Reload chimes",
+      "description": "Rescans /config/noticom/chimes now instead of waiting for the next automatic scan."
+    }
   }
 }
