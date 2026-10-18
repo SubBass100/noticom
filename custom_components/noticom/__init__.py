@@ -1,8 +1,8 @@
 """The Noticom notification and intercom integration.
 
 Status: discovery, adoption, the node control channel and chimes work.
-Still to build: push-to-talk clips, the sidebar panel and media_player
-entities.
+The sidebar panel manages chimes. Still to build: push-to-talk clips,
+routing and admin settings in the panel, and media_player entities.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from .const import CHIME_SCAN_INTERVAL_S, CONF_NODE_ID, CONF_NODE_PUBKEY, DOMAIN
 from .files import NoticomChimeView
 from .hub import NoticomHub
 from .identity import async_get_server_key
+from .panel import async_setup_panel
 from .services import async_setup_services
 from .websocket import NoticomWebSocketView
 
@@ -55,6 +56,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.http.register_view(NoticomWebSocketView())
     hass.http.register_view(NoticomChimeView())
     async_setup_services(hass)
+    await async_setup_panel(hass)
     return True
 
 

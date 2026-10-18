@@ -8,8 +8,10 @@ periodically and on `noticom.reload_chimes`.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +23,23 @@ from .const import CHIME_CACHE_DIR, CHIME_DIR
 _LOGGER = logging.getLogger(__name__)
 
 EXTENSIONS = {".wav", ".mp3"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _-]{0,47}$")
+
+
+class ChimeError(Exception):
+    """A chime operation failed; the message is shown to the user."""
+
+
+def clean_name(name: str) -> str:
+    """Validate a chime name: letters, digits, spaces, _ and -; max 48."""
+    name = name.strip()
+    if not NAME_RE.match(name):
+        raise ChimeError(
+            "Chime names can use letters, numbers, spaces, - and _ "
+            "(start with a letter or number, up to 48 characters)."
+        )
+    return name
 
 
 @dataclass(frozen=True)
@@ -31,6 +50,8 @@ class Chime:
     hash: str
     size: int
     path: Path  # the normalized WAV in the cache
+    source: Path  # the file in the chimes folder
+    duration: float  # seconds
 
     def manifest_entry(self) -> dict:
         """As listed in the `chimes` message."""
@@ -46,6 +67,7 @@ class ChimeStore:
         self.cache = Path(hass.config.path(CHIME_CACHE_DIR))
         self._chimes: dict[str, Chime] = {}  # lower-case name -> chime
         self._seen: dict[Path, tuple[tuple[int, int], Chime | None]] = {}
+        self._lock = asyncio.Lock()
 
     @property
     def chimes(self) -> list[Chime]:
@@ -69,7 +91,54 @@ class ChimeStore:
 
     async def async_scan(self) -> bool:
         """Rescan the folder. Returns True if the chime list changed."""
-        return await self.hass.async_add_executor_job(self._scan)
+        async with self._lock:
+            return await self.hass.async_add_executor_job(self._scan)
+
+    async def async_add(self, name: str, filename: str, data: bytes, replace: bool = False) -> Chime:
+        """Save an uploaded chime and load it. Raises ChimeError."""
+        name = clean_name(name)
+        ext = Path(filename).suffix.lower()
+        if ext not in EXTENSIONS:
+            raise ChimeError("Upload a WAV or MP3 file.")
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise ChimeError("That file is over 10 MB; chimes should be short.")
+        if (existing := self.get(name)) is not None and not replace:
+            raise ChimeError(f"A chime named {existing.name!r} already exists.")
+        async with self._lock:
+            return await self.hass.async_add_executor_job(
+                self._add, name, ext, data, existing
+            )
+
+    def _add(self, name: str, ext: str, data: bytes, existing: Chime | None) -> Chime:
+        self.folder.mkdir(parents=True, exist_ok=True)
+        target = self.folder / f"{name}{ext}"
+        staging = self.folder / f".upload-{name}{ext}"
+        staging.write_bytes(data)
+        try:
+            chime = self._load(staging, name=name)
+        except Exception:
+            staging.unlink(missing_ok=True)
+            raise
+        if chime is None:
+            staging.unlink(missing_ok=True)
+            raise ChimeError("That file couldn't be read as audio.")
+        if existing is not None and existing.source != target:
+            existing.source.unlink(missing_ok=True)  # replacing e.g. .wav with .mp3
+        staging.replace(target)
+        self._scan()
+        return self.get(name) or chime
+
+    async def async_delete(self, name: str) -> None:
+        """Delete a chime's file. Raises ChimeError if there's no such chime."""
+        chime = self.get(name)
+        if chime is None:
+            raise ChimeError(f"No chime named {name!r}.")
+        async with self._lock:
+            await self.hass.async_add_executor_job(self._delete, chime)
+
+    def _delete(self, chime: Chime) -> None:
+        chime.source.unlink(missing_ok=True)
+        self._scan()
 
     def _scan(self) -> bool:
         self.folder.mkdir(parents=True, exist_ok=True)
@@ -109,7 +178,7 @@ class ChimeStore:
             _LOGGER.info("Chimes: %s", ", ".join(c.name for c in self.chimes) or "none")
         return changed
 
-    def _load(self, path: Path) -> Chime | None:
+    def _load(self, path: Path, name: str | None = None) -> Chime | None:
         try:
             wav = convert(path)
         except ConversionError as err:
@@ -121,7 +190,16 @@ class ChimeStore:
             tmp = cached.with_suffix(".tmp")
             tmp.write_bytes(wav)
             tmp.replace(cached)
-        return Chime(name=path.stem, hash=digest, size=len(wav), path=cached)
+        rate = int.from_bytes(wav[24:28], "little") or 1
+        duration = max(0, len(wav) - 44) / 2 / rate
+        return Chime(
+            name=name or path.stem,
+            hash=digest,
+            size=len(wav),
+            path=cached,
+            source=path,
+            duration=round(duration, 2),
+        )
 
     def _prune_cache(self) -> None:
         keep = {c.path.name for c in self._chimes.values()}

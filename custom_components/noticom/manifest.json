@@ -1,14 +1,25 @@
 {
   "domain": "noticom",
   "name": "Noticom",
-  "codeowners": ["@SubBass100"],
+  "after_dependencies": [
+    "frontend",
+    "panel_custom"
+  ],
+  "codeowners": [
+    "@SubBass100"
+  ],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": [
+    "http",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/SubBass100/noticom",
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SubBass100/noticom/issues",
   "requirements": [],
   "version": "0.1.0",
-  "zeroconf": ["_noticom._tcp.local."]
+  "zeroconf": [
+    "_noticom._tcp.local."
+  ]
 }

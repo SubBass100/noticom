@@ -72,8 +72,23 @@ capped at +20 dB) and cached as 16-bit WAV in `/config/noticom/.cache/`
 named by SHA-256. Changes are pushed to connected nodes as a `chimes`
 message; nodes download missing hashes with signed requests, verify the
 hash, and delete unlisted ones (cache: `/var/cache/noticom/chimes`). A play
-for a chime a node hasn't synced yet is fetched on demand. The sidebar
-panel (planned) will manage the same folder.
+for a chime a node hasn't synced yet is fetched on demand.
+
+### Sidebar panel
+
+`Noticom` in the sidebar (admin only) is a plain web component
+(`frontend/noticom-panel.js`, no build step) using HA theme variables. Its
+API, all admin-only:
+
+| Call | Use |
+|---|---|
+| WS `noticom/chimes/list` | Chimes: name, hash, duration, source file |
+| `POST /api/noticom/panel/chimes` (multipart `file`, `name`, `replace`) | Upload; names are letters, digits, spaces, `-`, `_` (max 48); 10 MB cap; the file is converted before it replaces anything |
+| `GET /api/noticom/panel/chime/{hash}` | Normalized WAV for the browser preview |
+| WS `noticom/chimes/delete` (`name`) | Delete the chime's file |
+
+"Play on nodes" calls `noticom.play_chime` with no target. Routing and admin
+defaults will join the panel with the intercom.
 
 Per-node settings editable from HA: name, hostname, DHCP or static IP, audio
 output device, volume, mic gain and boost, button GPIO pin and type

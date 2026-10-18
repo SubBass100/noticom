@@ -11,8 +11,9 @@ Raspberry Pi nodes with a ReSpeaker 2-Mic HAT, a small speaker and a button.
 - Adopt nodes from the HA UI with a physical button-press confirmation; each
   node is bonded to your HA with an Ed25519 keypair.
 
-> **Status: early.** Adoption, the live node connection, per-node settings
-> and chimes work. The push-to-talk intercom and the sidebar panel are next.
+> **Status: early.** Adoption, the live node connection, per-node settings,
+> chimes and the Noticom sidebar panel (chime upload, preview and delete)
+> work. The push-to-talk intercom is next.
 
 ## Repos
 
@@ -33,13 +34,16 @@ Design decisions and the wire protocol live in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Chimes
 
-Put WAV or MP3 files in **`/config/noticom/chimes/`** (the folder is created
-on first start; use the File editor add-on's upload button or Samba). The
-file name without its extension is the chime's name, so `mailbox.mp3` is
-the chime `mailbox`. Noticom notices new, changed and deleted files within
-30 seconds (or run **Noticom: Reload chimes**), normalizes them to a
-consistent loudness, and copies them to every node ahead of time so they
-play instantly.
+Open **Noticom** in the sidebar (admins only) to upload WAV or MP3 chimes,
+name them, preview them in your browser, test them on your nodes, and delete
+them. Each chime is normalized to a consistent loudness and copied to every
+node ahead of time, so it plays instantly.
+
+Behind the scenes chimes live in **`/config/noticom/chimes/`**, and files
+you put there yourself (File editor, Samba) show up too: the file name
+without its extension is the chime's name, so `mailbox.mp3` is the chime
+`mailbox`. Changes are picked up within 30 seconds, or straight away with
+**Noticom: Reload chimes**.
 
 Play one from any automation with **Noticom: Play chime**. Target nodes by
 device, entity or area, or leave the target empty for every node:
