@@ -33,6 +33,11 @@ repos are built against it; change it here first.
   dropped server-side; a doorbell from ten minutes ago is not useful.
 - **Network/hostname changes apply with rollback:** if the node cannot
   reconnect to HA within 60 s, it reverts and reports failure.
+- **Mono audio.** Output is mixed to mono in the codec (the speaker sits on
+  one channel). Recordings capture both mics in stereo, are averaged to mono
+  (~3 dB less hiss), DC-offset removed and peak-normalized to about -1 dBFS
+  (gain capped at +26 dB) before upload. Chimes get the same normalization
+  when uploaded to HA.
 - **Licence:** Apache-2.0 for both repos.
 
 ## Home Assistant surface
@@ -123,9 +128,9 @@ Node config object:
   "hostname": "noticom-kitchen",
   "network": {"mode": "dhcp"},
   "output_device": "default",
-  "volume": 70,
-  "mic_gain": 50,
-  "mic_boost": 1,
+  "volume": 100,
+  "mic_gain": 90,
+  "mic_boost": 3,
   "button_pin": 17,
   "ptt_enabled": true,
   "chime_priority": true
@@ -162,3 +167,33 @@ node reports `done`/`dropped`/`error`, or after a 10-minute TTL.
 - **Queue:** 1 playing + 5 waiting; 6th → `dropped`. With `chime_priority`,
   chimes go after waiting chimes, before waiting clips; never interrupt.
 - **Offline targets:** not queued server-side.
+
+## Hardware notes (ReSpeaker 2-Mic HAT)
+
+Tested on a Pi 3, Raspberry Pi OS based on Debian 13 (trixie), kernel
+6.18.50+rpt-rpi-v8, Keyestudio ReSpeaker 2-Mic HAT.
+
+- The board has no HAT ID EEPROM. The codec is identified over I2C bus 1:
+  **0x1a = WM8960 (v1 / Keyestudio)**, 0x18 = TLV320AIC3104 (v2, not yet
+  supported).
+- **Use the stock overlay:** `dtoverlay=wm8960-soundcard,alsaname=seeed2micvoicec`.
+  Seeed's `respeaker-2mic-v1_0` overlay loads and shows the card, but never
+  supplies the 12.288 MHz MCLK: playback fails with `Input/output error` and
+  dmesg shows `bcm2835-i2s ... FIFO clear timed out: no PCM clock`.
+- Always address the HAT as `plughw:CARD=seeed2micvoicec,DEV=0`; card 0 is
+  the Pi's headphone jack.
+- The WM8960 powers up with output mixers and mic inputs disconnected. The
+  node applies this mixer state at startup (`noticom_node/mixer.py`):
+
+| Control | Value | Notes |
+|---|---|---|
+| Left/Right Output Mixer PCM | on | DAC to outputs |
+| DAC Mono Mix | Mono | Same audio on both channels |
+| PCM Playback -6dB | off | |
+| Playback | 100% | DAC digital, 100% = 0 dB |
+| Speaker AC / Speaker DC | 5 | Class-D boost 1.8x; drop to 3-4 if it distorts or the Pi browns out |
+| **Speaker** | **100%** | **HA volume** |
+| Left/Right Boost Mixer LINPUT1/RINPUT1 | on | The two mics |
+| Left/Right Input Mixer Boost | on | |
+| **Left/Right Input Boost Mixer LINPUT1/RINPUT1** | **3** | **HA mic boost** (0-3 = 0/13/20/29 dB) |
+| **Capture** | **90% cap** | **HA mic gain** |
