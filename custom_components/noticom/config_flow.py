@@ -96,9 +96,11 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
         server_key = await async_get_server_key(self.hass)
         nonce = protocol.new_nonce()
         session = async_get_clientsession(self.hass)
+        url = f"http://{self._host}:{NODE_ADOPT_PORT}/adopt"
+        _LOGGER.debug("Adopting node %s at %s", self._node_id, url)
         try:
             async with session.post(
-                f"http://{self._host}:{NODE_ADOPT_PORT}/adopt",
+                url,
                 json={
                     "server_pubkey": protocol.public_key_b64(server_key),
                     "nonce": nonce,
@@ -109,9 +111,16 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
                 if resp.status == 408:
                     raise AdoptError("button_timeout")
                 if resp.status != 200:
+                    _LOGGER.warning(
+                        "Node %s at %s answered HTTP %s: %s",
+                        self._node_id, url, resp.status, await resp.text(),
+                    )
                     raise AdoptError("cannot_connect")
                 body = await resp.json()
         except (aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.warning(
+                "Couldn't reach node %s at %s: %r", self._node_id, url, err
+            )
             raise AdoptError("cannot_connect") from err
 
         node_pubkey = body.get("node_pubkey", "")
