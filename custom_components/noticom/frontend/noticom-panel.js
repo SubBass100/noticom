@@ -82,6 +82,21 @@ const STYLE = `
   .chip { font-size: 12px; border-radius: 10px; padding: 1px 8px; background: var(--secondary-background-color, rgba(0,0,0,.06)); color: var(--secondary-text-color); }
   .chip.done { color: var(--success-color, #43a047); }
   .chip.error, .chip.offline, .chip.dropped { color: var(--error-color, #db4437); }
+  .form { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 14px 20px; align-items: center; padding: 16px; }
+  .form > label { font-size: 15px; }
+  .form .ctl { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .form input[type=range] { flex: 1; min-width: 0; accent-color: var(--primary-color); }
+  .form input[type=number] { width: 90px; font: inherit; font-size: 16px; color: var(--primary-text-color);
+    background: var(--input-fill-color, var(--secondary-background-color, rgba(0,0,0,.04)));
+    border: 1px solid var(--divider-color, rgba(0,0,0,.2)); border-radius: 8px; padding: 9px 10px; }
+  .form .val { width: 3.2em; text-align: right; color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
+  .form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px 16px; flex-wrap: wrap; }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  input[type=checkbox] { accent-color: var(--primary-color); width: 18px; height: 18px; flex-shrink: 0; }
+  @media (max-width: 600px) {
+    .form { grid-template-columns: 1fr; gap: 6px; }
+    .form > label { margin-top: 8px; color: var(--secondary-text-color); font-size: 13px; }
+  }
   .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 4px 12px; }
   h2 { font-size: 22px; font-weight: 400; margin: 0; }
   .hint { color: var(--secondary-text-color); font-size: 14px; line-height: 1.5; }
@@ -229,6 +244,7 @@ class NoticomPanel extends HTMLElement {
       <nav class="tabs" role="tablist">
         <button class="tab" role="tab" data-tab="chimes" aria-selected="true">Chimes</button>
         <button class="tab" role="tab" data-tab="intercom" aria-selected="false">Intercom</button>
+        <button class="tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
       </nav>
       <main>
       <section data-panel="chimes">
@@ -289,6 +305,52 @@ class NoticomPanel extends HTMLElement {
           <div class="ic-messages"><div class="empty">Loading…</div></div>
         </div>
       </section>
+
+      <section data-panel="settings" hidden>
+        <div class="section-head"><h2>Settings</h2></div>
+        <div class="card pad">
+          <label class="switch-row">
+            <div>
+              <div class="title" style="font-size:16px">Chimes jump the queue</div>
+              <div class="hint">A chime plays before intercom messages that are still waiting. It never cuts off what's already playing.</div>
+            </div>
+            <input type="checkbox" class="st-priority">
+          </label>
+        </div>
+        <div class="card">
+          <div class="list-head"><span>Defaults for new nodes</span></div>
+          <p class="hint" style="margin:12px 16px 0">Nodes you adopt from now on start with these. Nodes you've already adopted keep their own settings; change those on each node's device page.</p>
+          <div class="form">
+            <label for="d-volume">Volume</label>
+            <div class="ctl"><input type="range" id="d-volume" min="0" max="100" step="1"><span class="val" data-for="d-volume"></span></div>
+            <label for="d-mic_gain">Mic gain</label>
+            <div class="ctl"><input type="range" id="d-mic_gain" min="0" max="100" step="1"><span class="val" data-for="d-mic_gain"></span></div>
+            <label for="d-mic_boost">Mic boost</label>
+            <div class="ctl"><select id="d-mic_boost">
+              <option value="0">Off (0 dB)</option><option value="1">+13 dB</option>
+              <option value="2">+20 dB</option><option value="3">+29 dB</option>
+            </select></div>
+            <label for="d-ptt_enabled">Push to talk</label>
+            <div class="ctl"><input type="checkbox" id="d-ptt_enabled"><span class="hint">Button records intercom messages</span></div>
+            <label for="d-button_pin">Button GPIO pin</label>
+            <div class="ctl"><input type="number" id="d-button_pin" min="2" max="27" step="1"><span class="hint">13: HAT Grove connector · 17: HAT onboard button</span></div>
+            <label for="d-button_nc">Button type</label>
+            <div class="ctl"><select id="d-button_nc">
+              <option value="false">Normally open (most buttons)</option>
+              <option value="true">Normally closed</option>
+            </select></div>
+            <label for="d-intercom_targets">Can talk to</label>
+            <div class="ctl"><select id="d-intercom_targets">
+              <option value="all">All nodes</option>
+              <option value="none">Nobody yet (choose on the Intercom tab)</option>
+            </select></div>
+          </div>
+          <div class="form-foot">
+            <span class="msg st-msg" role="status" aria-live="polite"></span>
+            <button class="primary st-save"><ha-icon icon="mdi:content-save"></ha-icon>Save defaults</button>
+          </div>
+        </div>
+      </section>
       </main>
     `;
 
@@ -302,6 +364,18 @@ class NoticomPanel extends HTMLElement {
     );
     root.querySelector(".ic-chime").addEventListener("change", (e) =>
       this._setChime(e.target.value || null)
+    );
+    root.querySelector(".st-priority").addEventListener("change", (e) =>
+      this._saveSettings({ chime_priority: e.target.checked })
+    );
+    root.querySelector(".st-save").addEventListener("click", () =>
+      this._saveSettings({ node_defaults: this._readDefaults() })
+    );
+    root.querySelectorAll('.form input[type="range"]').forEach((r) =>
+      r.addEventListener("input", () => this._showRange(r))
+    );
+    root.querySelectorAll(".form input, .form select").forEach((el) =>
+      el.addEventListener("change", () => this._settingsMsg(""))
     );
 
     const drop = root.querySelector(".drop");
@@ -495,6 +569,8 @@ class NoticomPanel extends HTMLElement {
     if (tab === "intercom") {
       this._loadIntercom();
       this._poll = setInterval(() => this._loadIntercom(), 10000);
+    } else if (tab === "settings") {
+      this._loadSettings();
     } else {
       this._load();
     }
@@ -621,6 +697,74 @@ class NoticomPanel extends HTMLElement {
     } catch (err) {
       this._toast(`Couldn't save: ${err.message || err}`);
       this._loadIntercom();
+    }
+  }
+
+  /* ---------- Settings tab ---------- */
+
+  _showRange(r) {
+    this.shadowRoot.querySelector(`.val[data-for="${r.id}"]`).textContent = `${r.value}%`;
+  }
+
+  _settingsMsg(text, isError = false) {
+    const m = this.shadowRoot.querySelector(".st-msg");
+    m.textContent = text;
+    m.classList.toggle("error", isError);
+  }
+
+  async _loadSettings() {
+    try {
+      this._applySettings(await this._hass.callWS({ type: "noticom/settings/get" }));
+    } catch (err) {
+      this._toast(`Couldn't load settings: ${err.message || err}`);
+    }
+  }
+
+  _applySettings(st) {
+    const root = this.shadowRoot;
+    root.querySelector(".st-priority").checked = st.chime_priority;
+    const d = st.node_defaults;
+    const set = (id, v) => { root.getElementById(`d-${id}`).value = String(v); };
+    set("volume", d.volume);
+    set("mic_gain", d.mic_gain);
+    set("mic_boost", d.mic_boost);
+    set("button_pin", d.button_pin);
+    set("button_nc", d.button_nc);
+    set("intercom_targets", d.intercom_targets === "all" ? "all" : "none");
+    root.getElementById("d-ptt_enabled").checked = d.ptt_enabled;
+    root.querySelectorAll('.form input[type="range"]').forEach((r) => this._showRange(r));
+  }
+
+  _readDefaults() {
+    const root = this.shadowRoot;
+    const v = (id) => root.getElementById(`d-${id}`).value;
+    return {
+      volume: Number(v("volume")),
+      mic_gain: Number(v("mic_gain")),
+      mic_boost: Number(v("mic_boost")),
+      ptt_enabled: root.getElementById("d-ptt_enabled").checked,
+      button_pin: Number(v("button_pin")),
+      button_nc: v("button_nc") === "true",
+      intercom_targets: v("intercom_targets") === "all" ? "all" : [],
+    };
+  }
+
+  async _saveSettings(change) {
+    if (change.node_defaults) {
+      const pin = change.node_defaults.button_pin;
+      if (!Number.isInteger(pin) || pin < 2 || pin > 27) {
+        this._settingsMsg("Button GPIO pin must be a whole number from 2 to 27.", true);
+        return;
+      }
+    }
+    try {
+      this._applySettings(await this._hass.callWS({ type: "noticom/settings/set", ...change }));
+      if (change.node_defaults) this._settingsMsg("Saved. New nodes will start with these settings.");
+      else this._toast(change.chime_priority ? "Chimes will jump the queue" : "Chimes will wait their turn");
+    } catch (err) {
+      if (change.node_defaults) this._settingsMsg(`Couldn't save: ${err.message || err}`, true);
+      else this._toast(`Couldn't save: ${err.message || err}`);
+      this._loadSettings();
     }
   }
 

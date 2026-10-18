@@ -4,7 +4,13 @@
     "step": {
       "adopt": {
         "title": "Adopt Noticom node",
-        "description": "Adopt node **{node_id}**? After you press Submit, the node chirps. Press its button within 60 seconds to confirm."
+        "description": "Adopt node **{node_id}**? Give it a name, then press Submit: the node chirps, and you have 60 seconds to press its button to confirm.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "Usually the room it's in, e.g. Kitchen."
+        }
       },
       "user": {
         "title": "Add a Noticom node",

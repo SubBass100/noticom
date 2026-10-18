@@ -58,6 +58,8 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_intercom_get)
     websocket_api.async_register_command(hass, ws_intercom_set_chime)
     websocket_api.async_register_command(hass, ws_intercom_set_targets)
+    websocket_api.async_register_command(hass, ws_settings_get)
+    websocket_api.async_register_command(hass, ws_settings_set)
 
 
 def chime_list(hub: NoticomHub) -> list[dict[str, Any]]:
@@ -255,3 +257,57 @@ async def ws_intercom_set_targets(hass: HomeAssistant, connection, msg: dict) ->
         entry, options={**entry.options, CONF_INTERCOM_TARGETS: targets}
     )
     connection.send_result(msg["id"], intercom_state(hass))
+
+
+NODE_DEFAULTS_SCHEMA = vol.Schema(
+    {
+        vol.Required("volume"): vol.All(int, vol.Range(min=0, max=100)),
+        vol.Required("mic_gain"): vol.All(int, vol.Range(min=0, max=100)),
+        vol.Required("mic_boost"): vol.All(int, vol.Range(min=0, max=3)),
+        vol.Required("ptt_enabled"): bool,
+        vol.Required("button_pin"): vol.All(int, vol.Range(min=2, max=27)),
+        vol.Required("button_nc"): bool,
+        vol.Required("intercom_targets"): vol.Any(TARGETS_ALL, vol.All([str], vol.Length(max=0))),
+    }
+)
+
+
+def settings_state(hub: NoticomHub) -> dict[str, Any]:
+    """Integration-wide settings shown on the Settings tab."""
+    defaults = hub.node_defaults
+    return {
+        "chime_priority": hub.chime_priority,
+        "node_defaults": {str(k): defaults[str(k)] for k in NODE_DEFAULTS_SCHEMA.schema},
+    }
+
+
+@websocket_api.websocket_command({vol.Required("type"): "noticom/settings/get"})
+@websocket_api.require_admin
+@callback
+def ws_settings_get(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Global settings and defaults for new nodes."""
+    connection.send_result(msg["id"], settings_state(hass.data[DOMAIN]))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "noticom/settings/set",
+        vol.Optional("chime_priority"): bool,
+        vol.Optional("node_defaults"): NODE_DEFAULTS_SCHEMA,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_settings_set(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Save global settings; a chime-priority change reaches nodes immediately."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    priority_changed = False
+    if "chime_priority" in msg:
+        priority_changed = msg["chime_priority"] != hub.chime_priority
+        hub.settings["chime_priority"] = msg["chime_priority"]
+    if "node_defaults" in msg:
+        hub.settings["node_defaults"] = dict(msg["node_defaults"])
+    await hub.async_save_settings()
+    if priority_changed:
+        await hub.async_push_config_all()
+    connection.send_result(msg["id"], settings_state(hub))

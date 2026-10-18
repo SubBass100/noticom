@@ -10,13 +10,16 @@ from aiohttp import web
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
 
 from . import protocol
 from .chimes import ChimeStore
 from .const import (
     CONF_BUTTON_NC,
     CONF_BUTTON_PIN,
+    CONF_INTERCOM_TARGETS,
     CONF_MIC_BOOST,
     CONF_MIC_GAIN,
     CONF_PTT_ENABLED,
@@ -29,6 +32,7 @@ from .const import (
     DEFAULT_PTT_ENABLED,
     DEFAULT_VOLUME,
     DOMAIN,
+    STORAGE_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,7 +57,7 @@ def node_options(entry: ConfigEntry) -> dict[str, Any]:
     return {**OPTION_DEFAULTS, **entry.options}
 
 
-def node_config(entry: ConfigEntry) -> dict[str, Any]:
+def node_config(entry: ConfigEntry, chime_priority: bool = DEFAULT_CHIME_PRIORITY) -> dict[str, Any]:
     """The config object sent to a node (docs/DESIGN.md §2)."""
     opts = node_options(entry)
     return {
@@ -64,7 +68,7 @@ def node_config(entry: ConfigEntry) -> dict[str, Any]:
         "ptt_enabled": opts[CONF_PTT_ENABLED],
         "button_pin": opts[CONF_BUTTON_PIN],
         "button_nc": opts[CONF_BUTTON_NC],
-        "chime_priority": DEFAULT_CHIME_PRIORITY,
+        "chime_priority": chime_priority,
     }
 
 
@@ -96,9 +100,41 @@ class NoticomHub:
         self.hass = hass
         self.links: dict[str, NodeLink] = {}
         self.chimes = ChimeStore(hass)
+        self._settings_store: Store[dict[str, Any]] = Store(
+            hass, STORAGE_VERSION, f"{DOMAIN}.settings"
+        )
+        self.settings: dict[str, Any] = {}
         from .intercom import Intercom  # noqa: PLC0415 - avoids an import cycle
 
         self.intercom = Intercom(hass, self)
+
+    async def async_load_settings(self) -> None:
+        """Load integration-wide settings."""
+        self.settings = await self._settings_store.async_load() or {}
+
+    async def async_save_settings(self) -> None:
+        """Persist integration-wide settings."""
+        await self._settings_store.async_save(self.settings)
+
+    @property
+    def chime_priority(self) -> bool:
+        """Whether chimes go ahead of waiting intercom messages."""
+        return bool(self.settings.get("chime_priority", DEFAULT_CHIME_PRIORITY))
+
+    @property
+    def node_defaults(self) -> dict[str, Any]:
+        """Settings given to newly adopted nodes."""
+        return {
+            **OPTION_DEFAULTS,
+            CONF_INTERCOM_TARGETS: "all",
+            **self.settings.get("node_defaults", {}),
+        }
+
+    async def async_push_config_all(self) -> None:
+        """Re-send every connected node its config (after a global change)."""
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.state is ConfigEntryState.LOADED:
+                await self.async_push_config(entry, entry.data["node_id"])
 
     async def async_broadcast_chimes(self) -> None:
         """Send the current chime list to every connected node."""
@@ -139,7 +175,9 @@ class NoticomHub:
 
     async def async_push_config(self, entry: ConfigEntry, node_id: str) -> bool:
         """Send a node its current config."""
-        return await self.async_send(node_id, protocol.T_CONFIG, config=node_config(entry))
+        return await self.async_send(
+            node_id, protocol.T_CONFIG, config=node_config(entry, self.chime_priority)
+        )
 
     async def async_unpair(self, node_id: str, server_key: Any) -> bool:
         """Tell a connected node to forget this server, then drop it."""

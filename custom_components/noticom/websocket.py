@@ -121,7 +121,7 @@ class NoticomWebSocketView(HomeAssistantView):
             protocol.encode(
                 protocol.T_WELCOME,
                 sig=server_sig,
-                config=node_config(entry),
+                config=node_config(entry, hass.data[DOMAIN].chime_priority),
                 chimes=hass.data[DOMAIN].chimes.manifest(),
             )
         )

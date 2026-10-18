@@ -46,6 +46,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up integration-wide pieces shared by all nodes."""
     await async_get_server_key(hass)
     hub = hass.data[DOMAIN] = NoticomHub(hass)
+    await hub.async_load_settings()
     await hub.chimes.async_scan()
     await hub.intercom.async_load()
 

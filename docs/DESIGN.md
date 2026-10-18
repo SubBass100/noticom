@@ -114,7 +114,11 @@ API, all admin-only:
 | WS `noticom/intercom/set_targets` (`node_id`, `targets`: `"all"` or ids) | Who a node can talk to |
 | `GET /api/noticom/panel/clip/{id}` | A recent message, for browser playback |
 
-Tabs: **Chimes** and **Intercom**. The Intercom tab refreshes every 10 s
+| WS `noticom/settings/get` / `noticom/settings/set` (`chime_priority`, `node_defaults`) | Global settings; a priority change is pushed to all nodes |
+
+Tabs: **Chimes**, **Intercom** and **Settings**. Settings live in
+`.storage/noticom.settings`; `node_defaults` become a new node's entry
+options at adoption (the adoption form also asks for its name). The Intercom tab refreshes every 10 s
 while open. "Play on nodes" calls `noticom.play_chime` with no target.
 
 Per-node settings editable from HA: name, hostname, DHCP or static IP, audio

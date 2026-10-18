@@ -13,7 +13,7 @@ Raspberry Pi nodes with a ReSpeaker 2-Mic HAT, a small speaker and a button.
 
 > **Status: early, feature-complete.** Adoption, the live node connection,
 > per-node settings, chimes, the push-to-talk intercom and the Noticom
-> sidebar panel all work. Admin defaults in the panel are planned.
+> sidebar panel all work.
 
 ## Repos
 
@@ -70,6 +70,20 @@ actions:
 Each node plays one thing at a time with up to 5 waiting; chimes go ahead
 of waiting intercom messages. Offline nodes are skipped (the action's
 response lists which). **Noticom: Stop** stops playback and clears the queue.
+
+## Settings and new nodes
+
+The panel's **Settings** tab holds:
+
+- **Chimes jump the queue** (on by default): a chime plays ahead of
+  intercom messages that are still waiting, never cutting off what's
+  already playing.
+- **Defaults for new nodes**: volume, mic gain and boost, push to talk,
+  button pin and type, and whether a new node can talk to all nodes or
+  nobody yet. Set these before adopting a batch of Pis.
+
+When adopting, give each node a name (usually its room) in the adoption
+form.
 
 ## Intercom
 

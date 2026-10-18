@@ -14,7 +14,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError, get_url
@@ -30,7 +30,7 @@ from .const import (
     DOMAIN,
     NODE_ADOPT_PORT,
 )
-from .hub import node_options
+from .hub import OPTION_DEFAULTS, node_options
 from .identity import async_get_server_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -137,21 +137,28 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Confirm, then ask the user to press the node's button."""
         errors: dict[str, str] = {}
+        default_name = f"Noticom {self._node_id}"
         if user_input is not None:
+            name = (user_input.get(CONF_NAME) or "").strip() or default_name
             try:
                 node_pubkey = await self._async_adopt()
             except AdoptError as err:
                 errors["base"] = err.reason
             else:
+                hub = self.hass.data.get(DOMAIN)
+                defaults = hub.node_defaults if hub is not None else dict(OPTION_DEFAULTS)
                 return self.async_create_entry(
-                    title=f"Noticom {self._node_id}",
+                    title=name,
                     data={
                         CONF_NODE_ID: self._node_id,
                         CONF_NODE_PUBKEY: node_pubkey,
                     },
+                    options=defaults,  # the admin defaults from the panel
                 )
+            default_name = name
         return self.async_show_form(
             step_id="adopt",
+            data_schema=vol.Schema({vol.Optional(CONF_NAME, default=default_name): str}),
             description_placeholders={"node_id": self._node_id or ""},
             errors=errors,
         )

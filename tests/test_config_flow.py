@@ -44,8 +44,9 @@ async def test_add_by_ip(hass, aioclient_mock, node_key):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"host": f" {HOST} "})
     assert result["step_id"] == "adopt"
     assert result["description_placeholders"] == {"node_id": NODE_ID}
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"name": "Kitchen"})
     assert result["type"] == "create_entry"
+    assert result["title"] == "Kitchen"
     assert result["data"]["node_id"] == NODE_ID
     assert result["data"]["node_pubkey"] == protocol.public_key_b64(node_key)
     assert result["result"].unique_id == NODE_ID
@@ -104,3 +105,22 @@ async def test_discovery_prefers_ipv4(hass, aioclient_mock, node_key):
     assert result["step_id"] == "adopt"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == "create_entry"
+
+
+async def test_new_node_gets_admin_defaults(hass, aioclient_mock, node_key, tmp_path):
+    from homeassistant.setup import async_setup_component
+
+    hass.config.config_dir = str(tmp_path)
+    assert await async_setup_component(hass, DOMAIN, {})
+    hub = hass.data[DOMAIN]
+    hub.settings["node_defaults"] = {"volume": 60, "button_pin": 17, "intercom_targets": []}
+    fake_node(aioclient_mock, node_key)
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"host": HOST})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    entry = result["result"]
+    assert entry.title == f"Noticom {NODE_ID}"  # default name when left as-is
+    assert entry.options["volume"] == 60
+    assert entry.options["button_pin"] == 17
+    assert entry.options["intercom_targets"] == []
+    assert entry.options["mic_gain"] == 90  # untouched defaults filled in

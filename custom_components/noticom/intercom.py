@@ -20,7 +20,6 @@ import numpy as np
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import protocol
@@ -34,7 +33,6 @@ from .const import (
     DOMAIN,
     EVENT_MESSAGE,
     MAX_CLIP_SECONDS,
-    STORAGE_VERSION,
 )
 
 if TYPE_CHECKING:
@@ -115,13 +113,11 @@ class Intercom:
         self.hub = hub
         self.clips: OrderedDict[str, Clip] = OrderedDict()
         self._jobs: dict[str, tuple[str, str]] = {}  # job_id -> (clip_id, node_id)
-        self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.settings")
-        self.settings: dict[str, Any] = {}
 
     async def async_load(self) -> None:
-        """Load settings, and create the default intercom chime the first time."""
-        self.settings = await self._store.async_load() or {}
-        if not self.settings.get("default_chime_created"):
+        """Create the default intercom chime the first time."""
+        settings = self.hub.settings
+        if not settings.get("default_chime_created"):
             if self.hub.chimes.get(DEFAULT_INTERCOM_CHIME) is None:
                 try:
                     await self.hub.chimes.async_add(
@@ -129,19 +125,19 @@ class Intercom:
                     )
                 except Exception:  # noqa: BLE001 - never block setup on this
                     _LOGGER.exception("Couldn't create the default intercom chime")
-            self.settings.setdefault("intercom_chime", DEFAULT_INTERCOM_CHIME)
-            self.settings["default_chime_created"] = True
-            await self._store.async_save(self.settings)
+            settings.setdefault("intercom_chime", DEFAULT_INTERCOM_CHIME)
+            settings["default_chime_created"] = True
+            await self.hub.async_save_settings()
 
     @property
     def chime_name(self) -> str | None:
         """The chime played before each message (None for no chime)."""
-        return self.settings.get("intercom_chime", DEFAULT_INTERCOM_CHIME)
+        return self.hub.settings.get("intercom_chime", DEFAULT_INTERCOM_CHIME)
 
     async def async_set_chime(self, name: str | None) -> None:
         """Choose the intercom chime."""
-        self.settings["intercom_chime"] = name
-        await self._store.async_save(self.settings)
+        self.hub.settings["intercom_chime"] = name
+        await self.hub.async_save_settings()
 
     def targets_for(self, sender: ConfigEntry) -> list[ConfigEntry]:
         """Loaded node entries the sender may talk to, never itself."""
