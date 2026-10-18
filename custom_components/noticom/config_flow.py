@@ -33,6 +33,19 @@ class AdoptError(Exception):
         self.reason = reason
 
 
+def _url_host(discovery_info: ZeroconfServiceInfo) -> str:
+    """Pick the address to reach the node at, formatted for a URL.
+
+    Prefer IPv4: a node's advertisement may also carry IPv6 link-local
+    addresses, which need brackets and often aren't routable from HA.
+    """
+    addresses = discovery_info.ip_addresses or [discovery_info.ip_address]
+    for address in addresses:
+        if address.version == 4:
+            return str(address)
+    return f"[{addresses[0]}]"
+
+
 class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle adoption of a Noticom node. One config entry per node."""
 
@@ -51,7 +64,7 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="invalid_discovery")
         await self.async_set_unique_id(node_id)
         self._abort_if_unique_id_configured()
-        self._host = str(discovery_info.ip_address)
+        self._host = _url_host(discovery_info)
         self._node_id = node_id
         self.context["title_placeholders"] = {"node_id": node_id}
         return await self.async_step_adopt()
