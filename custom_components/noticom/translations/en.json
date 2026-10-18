@@ -15,7 +15,7 @@
     },
     "abort": {
       "already_configured": "This node is already adopted.",
-      "discovery_only": "Noticom nodes are added automatically when they're discovered on your network. Install the node software on a Raspberry Pi to get started.",
+      "discovery_only": "Noticom nodes are added automatically when they're discovered on your network. Install the node software on a Raspberry Pi to get started. (Adding a node by IP address is planned.)",
       "invalid_discovery": "The discovered node didn't report a node ID."
     }
   }

@@ -211,3 +211,12 @@ with `pull_up=True` its `value` is inverted (1 = pin low). Before HA has sent a 
 adoption press) the node uses `/etc/noticom/node.env`
 (`NOTICOM_BUTTON_PIN`, `NOTICOM_BUTTON_NC`), written by the installer and
 overridable at install time.
+
+## Roadmap
+
+- **Manual node setup** (pinned). Adding a node shouldn't depend on mDNS
+  discovery working. Settings → Add integration → Noticom should offer
+  "Add a node by IP address": the user enters the node's IP (shown in its
+  log and by `hostname -I`), HA calls `GET http://<ip>:8742/info` to fetch
+  the node_id, then runs the same `/adopt` handshake and button-press
+  confirmation as discovery. Replaces today's "discovery only" abort.
