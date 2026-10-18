@@ -38,7 +38,7 @@ ADOPT_TIMEOUT_S = 75  # node waits 60 s for a button press; allow for latency
 
 # Admin defaults.
 DEFAULT_BUTTON_PIN = 13  # Grove connector; 17 is the HAT's onboard button
-DEFAULT_BUTTON_NC = True  # normally closed
+DEFAULT_BUTTON_NC = False  # normally open
 DEFAULT_CHIME_PRIORITY = True
 DEFAULT_VOLUME = 100
 DEFAULT_MIC_GAIN = 90

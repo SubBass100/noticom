@@ -59,8 +59,8 @@ Actions:
 
 Per-node settings editable from HA: name, hostname, DHCP or static IP, audio
 output device, volume, mic gain and boost, button GPIO pin and type
-(normally open/closed; admin-set default GPIO13 normally closed, GPIO17 is
-the HAT's onboard normally-open button) or PTT disabled, and the allow-list of nodes
+(normally open/closed; admin-set default GPIO13 normally open, GPIO17 is
+the HAT's onboard button) or PTT disabled, and the allow-list of nodes
 (or all) its intercom messages go to.
 
 The sidebar panel manages chimes (upload WAV/MP3, preview, delete), the
@@ -134,7 +134,7 @@ Node config object:
   "mic_gain": 90,
   "mic_boost": 3,
   "button_pin": 13,
-  "button_nc": true,
+  "button_nc": false,
   "ptt_enabled": true,
   "chime_priority": true
 }
@@ -205,8 +205,9 @@ Tested on a Pi 3, Raspberry Pi OS based on Debian 13 (trixie), kernel
 
 Buttons connect a GPIO pin to ground, with the internal pull-up enabled.
 Normally open: idles high, low while pressed. Normally closed: idles low,
-high while pressed. The reference build uses a **normally closed button on
-GPIO13** (Grove connector). Before HA has sent a config (e.g. for the
+high while pressed. The reference build uses a **normally open button on
+GPIO13** (Grove connector). Careful when probing pins with gpiozero:
+with `pull_up=True` its `value` is inverted (1 = pin low). Before HA has sent a config (e.g. for the
 adoption press) the node uses `/etc/noticom/node.env`
 (`NOTICOM_BUTTON_PIN`, `NOTICOM_BUTTON_NC`), written by the installer and
 overridable at install time.
