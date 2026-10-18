@@ -11,7 +11,11 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.service import async_extract_config_entry_ids
+from homeassistant.core import callback
+from homeassistant.helpers.service import (
+    async_extract_config_entry_ids,
+    async_set_service_schema,
+)
 
 from . import protocol
 from .const import (
@@ -45,6 +49,47 @@ async def _target_nodes(hass: HomeAssistant, call: ServiceCall) -> list[tuple[st
             continue
         nodes.append((entry.data[CONF_NODE_ID], entry.title))
     return nodes
+
+
+NODE_TARGET = {
+    "device": [{"integration": DOMAIN}],
+    "entity": [{"integration": DOMAIN}],
+}
+
+
+@callback
+def async_update_chime_choices(hass: HomeAssistant, names: list[str]) -> None:
+    """Make the Play chime action's Chime field a dropdown of current chimes.
+
+    services.yaml can only list fixed options, so the description is
+    replaced at runtime whenever the chime list changes. Custom values stay
+    allowed so templates still work.
+    """
+    async_set_service_schema(
+        hass,
+        DOMAIN,
+        SERVICE_PLAY_CHIME,
+        {
+            "name": "Play chime",
+            "description": "Plays a chime on Noticom nodes. Pick nodes, or leave the target empty to play on all of them.",
+            "target": NODE_TARGET,
+            "fields": {
+                ATTR_CHIME: {
+                    "name": "Chime",
+                    "description": "Which chime to play. Manage chimes in the Noticom panel.",
+                    "required": True,
+                    "example": names[0] if names else "doorbell",
+                    "selector": {
+                        "select": {
+                            "options": names,
+                            "custom_value": True,
+                            "sort": True,
+                        }
+                    },
+                }
+            },
+        },
+    )
 
 
 def async_setup_services(hass: HomeAssistant) -> None:
@@ -88,3 +133,4 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(DOMAIN, SERVICE_STOP, stop, STOP_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_RELOAD_CHIMES, reload_chimes)
+    async_update_chime_choices(hass, [c.name for c in hub.chimes.chimes])

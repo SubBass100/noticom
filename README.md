@@ -46,8 +46,10 @@ without its extension is the chime's name, so `mailbox.mp3` is the chime
 `mailbox`. Changes are picked up within 30 seconds, or straight away with
 **Noticom: Reload chimes**.
 
-Play one from any automation with **Noticom: Play chime**. Target nodes by
-device, entity or area, or leave the target empty for every node:
+Play one from any automation: **+ Add action → Noticom → Play chime**.
+Pick the **Chime** from the dropdown (it lists your current chimes), and
+choose nodes with **+ Choose device / area** — or add no targets to play on
+every node. In YAML:
 
 ```yaml
 # Mail's here: chime in the kitchen and office.

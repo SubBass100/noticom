@@ -137,7 +137,11 @@ class NoticomHub:
                 await self.async_push_config(entry, entry.data["node_id"])
 
     async def async_broadcast_chimes(self) -> None:
-        """Send the current chime list to every connected node."""
+        """Send the current chime list to every connected node, and refresh
+        the Play chime action's dropdown."""
+        from .services import async_update_chime_choices  # noqa: PLC0415 - import cycle
+
+        async_update_chime_choices(self.hass, [c.name for c in self.chimes.chimes])
         manifest = self.chimes.manifest()
         for link in list(self.links.values()):
             await link.send(protocol.T_CHIMES, chimes=manifest)

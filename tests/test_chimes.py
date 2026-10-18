@@ -157,3 +157,28 @@ async def test_play_chime_offline_node(hass, chime_dir, node_entry):
         DOMAIN, "play_chime", {"chime": "doorbell"}, blocking=True, return_response=True
     )
     assert result["offline"] == ["Hallway"] and result["played"] == []
+
+
+async def test_play_chime_action_offers_chime_dropdown(
+    hass, chime_dir, hass_client, tmp_path
+):
+    from homeassistant.helpers.service import async_get_all_descriptions
+
+    write_wav(chime_dir / "doorbell.wav")
+    await load(hass)
+
+    async def options():
+        desc = (await async_get_all_descriptions(hass))[DOMAIN]["play_chime"]
+        assert desc["target"]["device"] == [{"integration": DOMAIN}]
+        return desc["fields"]["chime"]["selector"]["select"]["options"]
+
+    assert await options() == ["doorbell", "intercom"]
+
+    # Uploading through the panel updates the dropdown straight away.
+    import aiohttp
+    form = aiohttp.FormData()
+    form.add_field("name", "mailbox")
+    form.add_field("file", write_wav(tmp_path / "m.wav").read_bytes(), filename="m.wav")
+    client = await hass_client()
+    assert (await client.post("/api/noticom/panel/chimes", data=form)).status == 200
+    assert await options() == ["doorbell", "intercom", "mailbox"]
