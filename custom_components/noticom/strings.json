@@ -1,0 +1,22 @@
+{
+  "config": {
+    "flow_title": "Noticom node {node_id}",
+    "step": {
+      "adopt": {
+        "title": "Adopt Noticom node",
+        "description": "Adopt node **{node_id}**? After you press Submit, the node chirps. Press its button within 60 seconds to confirm."
+      }
+    },
+    "error": {
+      "button_timeout": "The node's button wasn't pressed within 60 seconds. Try again.",
+      "cannot_connect": "Couldn't reach the node.",
+      "invalid_reply": "The node's reply failed verification.",
+      "no_internal_url": "Home Assistant has no local URL configured (Settings → System → Network)."
+    },
+    "abort": {
+      "already_configured": "This node is already adopted.",
+      "discovery_only": "Noticom nodes are added automatically when they're discovered on your network. Install the node software on a Raspberry Pi to get started.",
+      "invalid_discovery": "The discovered node didn't report a node ID."
+    }
+  }
+}

@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Noticom
+.vscode/
+.idea/
+.DS_Store
+/config/
+*.wav
+*.mp3
+!tests/fixtures/*.wav
