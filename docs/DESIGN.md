@@ -301,6 +301,14 @@ overridable at install time.
   ARP lookups: the node reaches HA, but HA gets `OSError 113: No route to
   host` connecting to the node, even on the same subnet. The installer
   disables it permanently via NetworkManager.
+- **HA may not be able to find a node until the node talks first.** On
+  some access points (seen on 2.4 GHz) HA's broadcast ARP lookups never
+  reach the Pi, so adoption fails with `OSError 113` even with power saving
+  off. An unclaimed node therefore browses for `_home-assistant._tcp`,
+  and opens a TCP connection to HA on discovery and every 20 s. Paired
+  nodes keep a WebSocket open to HA, which has the same effect. The node
+  also re-checks Wi-Fi power saving every minute itself, since OS settings
+  don't reliably survive reboots.
 - mDNS records must carry the node's IPv4 address (HA drops address-less
   services), and HA prefers IPv4 when connecting (IPv6 link-local addresses
   need brackets and often aren't routable).

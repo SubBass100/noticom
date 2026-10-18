@@ -157,7 +157,7 @@ under the node's **Configure** button.
 | Problem | What to try |
 |---|---|
 | Node doesn't appear under Discovered | Use **Add integration → Noticom** and type its IP address |
-| "Couldn't reach the node" when adding | Make sure the node and Home Assistant are on the same network. Re-run the node installer, which fixes a Wi-Fi power-saving setting that causes this |
+| "Couldn't reach the node" when adding | Update the node (re-run its install line). As a quick workaround, run `ping -c 3 <Home Assistant IP>` on the Pi and try again. If you reflashed the Pi, ignore old Noticom cards and add it by IP |
 | No sound from a node | Check its **Volume**, and that the speaker is plugged into the HAT's speaker port |
 | Messages are too quiet or too loud | Adjust that node's **Mic gain** and **Mic boost** |
 | Something else | Check **Settings → System → Logs** and search for `noticom` |
