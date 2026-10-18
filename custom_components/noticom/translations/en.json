@@ -18,5 +18,44 @@
       "discovery_only": "Noticom nodes are added automatically when they're discovered on your network. Install the node software on a Raspberry Pi to get started. (Adding a node by IP address is planned.)",
       "invalid_discovery": "The discovered node didn't report a node ID."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Button",
+        "description": "How this node's intercom button is wired. The node restarts to apply a change.",
+        "data": {
+          "button_pin": "GPIO pin",
+          "button_nc": "Normally closed button"
+        },
+        "data_description": {
+          "button_pin": "BCM GPIO number. 13 is on the HAT's Grove connector; 17 is the HAT's onboard button.",
+          "button_nc": "Turn on if the pin reads high when the button is pressed (normally closed). Most buttons are normally open."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      }
+    },
+    "number": {
+      "volume": {
+        "name": "Volume"
+      },
+      "mic_gain": {
+        "name": "Mic gain"
+      },
+      "mic_boost": {
+        "name": "Mic boost"
+      }
+    },
+    "switch": {
+      "ptt_enabled": {
+        "name": "Push to talk"
+      }
+    }
   }
 }

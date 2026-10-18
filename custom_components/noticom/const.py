@@ -26,6 +26,14 @@ MAX_REQUEST_AGE_S = 30
 CONF_NODE_ID = "node_id"
 CONF_NODE_PUBKEY = "node_pubkey"
 
+# Config entry option keys (per-node settings).
+CONF_VOLUME = "volume"
+CONF_MIC_GAIN = "mic_gain"
+CONF_MIC_BOOST = "mic_boost"
+CONF_PTT_ENABLED = "ptt_enabled"
+CONF_BUTTON_PIN = "button_pin"
+CONF_BUTTON_NC = "button_nc"
+
 # Storage.
 STORAGE_VERSION = 1
 STORAGE_KEY = "noticom"
@@ -43,6 +51,9 @@ DEFAULT_CHIME_PRIORITY = True
 DEFAULT_VOLUME = 100
 DEFAULT_MIC_GAIN = 90
 DEFAULT_MIC_BOOST = 3
+DEFAULT_PTT_ENABLED = True
+
+PLATFORMS = ["binary_sensor", "number", "switch"]
 
 # Actions.
 SERVICE_PLAY_CHIME = "play_chime"

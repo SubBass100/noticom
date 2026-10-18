@@ -10,8 +10,10 @@ Raspberry Pi nodes with a ReSpeaker 2-Mic HAT, a small speaker and a button.
 - Adopt nodes from the HA UI with a physical button-press confirmation; each
   node is bonded to your HA with an Ed25519 keypair.
 
-> **Status: early scaffold.** Discovery and adoption are in place; the
-> control channel, chimes, panel and entities are next.
+> **Status: early.** Discovery, adoption and the live node connection work:
+> each node shows up with Connected, Volume, Mic gain, Mic boost and Push to
+> talk entities, and its button wiring is under Configure. Chimes, the
+> panel and the intercom itself are next.
 
 ## Repos
 
@@ -33,8 +35,9 @@ Design decisions and the wire protocol live in [docs/DESIGN.md](docs/DESIGN.md).
 ## Development
 
 ```sh
-pip install pytest cryptography
-python -m pytest tests
+pip install -r requirements_test.txt
+pip install -e ../noticom-node   # optional: enables the end-to-end tests
+python -m pytest
 ```
 
 ## License

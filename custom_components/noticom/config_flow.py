@@ -6,8 +6,15 @@ import logging
 from typing import Any
 
 import aiohttp
+import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
@@ -15,11 +22,14 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from . import protocol
 from .const import (
     ADOPT_TIMEOUT_S,
+    CONF_BUTTON_NC,
+    CONF_BUTTON_PIN,
     CONF_NODE_ID,
     CONF_NODE_PUBKEY,
     DOMAIN,
     NODE_ADOPT_PORT,
 )
+from .hub import node_options
 from .identity import async_get_server_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,6 +60,12 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle adoption of a Noticom node. One config entry per node."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Per-node settings that aren't entities (the button wiring)."""
+        return NoticomOptionsFlow()
 
     def __init__(self) -> None:
         self._host: str | None = None
@@ -143,3 +159,26 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.warning("Node %s returned an invalid adoption reply", self._node_id)
             raise AdoptError("invalid_reply")
         return node_pubkey
+
+
+class NoticomOptionsFlow(OptionsFlow):
+    """Edit a node's button pin and type."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show the button settings."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={**self.config_entry.options, **user_input}
+            )
+        opts = node_options(self.config_entry)
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_BUTTON_PIN, default=opts[CONF_BUTTON_PIN]): vol.All(
+                    vol.Coerce(int), vol.Range(min=2, max=27)
+                ),
+                vol.Required(CONF_BUTTON_NC, default=opts[CONF_BUTTON_NC]): bool,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

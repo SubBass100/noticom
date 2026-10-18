@@ -99,13 +99,27 @@ The node opens `ws(s)://<ha>:8123/api/noticom/ws`. This endpoint does its own
 Ed25519 auth, not HA user tokens. All frames are JSON objects with a `t`
 (type) field.
 
-Handshake:
+Handshake (mutual auth):
 
 ```
 server → node  {"t":"challenge","nonce":"<b64>"}
-node → server  {"t":"auth","node_id":"...","sig":"<b64 sign(raw nonce bytes)>","version":"..."}
-server → node  {"t":"welcome","config":{...},"chimes":[{"name":"dingdong","hash":"<sha256 hex>","size":12345}]}
+node → server  {"t":"auth","node_id":"...","nonce":"<b64 node nonce>","version":"...",
+                "sig":"<b64 sign(raw server nonce bytes)>"}
+server → node  {"t":"welcome","sig":"<b64 sign(raw node nonce bytes)>","config":{...},"chimes":[...]}
+           or  {"t":"unpair","sig":"<b64 sign('unpair\n' + raw node nonce bytes)>"}
+           or  {"t":"error","reason":"bad_auth|bad_signature|not_ready"}
 ```
+
+The node only accepts `welcome` if its `sig` verifies against the server key
+saved at adoption, so an impostor can't configure it. `unpair` is signed over
+the node's nonce for this connection, so it can't be replayed later. HA sends
+`unpair` when the node's entry is deleted (immediately if online, otherwise
+at its next connection) and `not_ready` while the entry is still being set
+up, including mid-adoption. The node waits 3 s after adoption before its first
+connection, and reconnects with exponential back-off (1–30 s). Keepalive is
+WebSocket ping/pong every 30 s. The channel is unencrypted on plain-HTTP HA
+installs; after the handshake, messages are trusted for the life of the
+connection.
 
 Server → node:
 
@@ -115,7 +129,7 @@ Server → node:
 | `chimes` | Chime manifest; node downloads missing hashes, deletes unlisted ones |
 | `play` | `job_id`, `kind` (`chime`/`clip`), `chime_hash`, `clip_url`, `pre_chime_hash`, `priority` |
 | `stop` | Stop current job and clear the queue |
-| `ping` | Keepalive |
+| `unpair` | Signed; the node factory-resets and restarts unclaimed |
 
 Node → server:
 
@@ -125,7 +139,6 @@ Node → server:
 | `ptt` | `phase`: `start` or `sent` (with `clip_id`) |
 | `job` | `job_id`, `status`: `started`/`done`/`dropped`/`error` |
 | `config_result` | `ok` (bool), `reason` |
-| `pong` | Keepalive reply |
 
 Node config object:
 
