@@ -85,7 +85,8 @@ The unclaimed node runs a local HTTP server on **port 8742** and advertises
    stores the server key and URL, stops the adoption server and stops
    advertising as unclaimed.
 5. HA verifies `sig` and creates the device. The node trusts only that server
-   key until factory reset (hold the button ~10 s while the service starts).
+   key until factory reset: 5 button presses within 4 s, at any time. (Not a
+   long hold: a broken wire on a normally closed button reads as held forever.)
 
 ### 2. Control channel (adopted)
 
