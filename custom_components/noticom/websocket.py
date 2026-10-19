@@ -51,6 +51,8 @@ class NoticomWebSocketView(HomeAssistantView):
 
         if (old := hub.attach(link)) is not None:
             await old.ws.close()  # the node reconnected; drop the stale socket
+        if entry := hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, link.node_id):
+            hub.software.node_connected(entry, link.version)
         _LOGGER.info("Node %s connected (v%s)", link.node_id, link.version)
         try:
             async for msg in ws:

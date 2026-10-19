@@ -43,7 +43,8 @@ async def test_add_by_ip(hass, aioclient_mock, node_key):
     assert result["step_id"] == "user"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"host": f" {HOST} "})
     assert result["step_id"] == "adopt"
-    assert result["description_placeholders"] == {"node_id": NODE_ID}
+    assert result["description_placeholders"]["node_id"] == NODE_ID
+    assert result["description_placeholders"]["pair_command"] == "sudo noticom-node pair"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"name": "Kitchen"})
     assert result["type"] == "create_entry"
     assert result["title"] == "Kitchen"

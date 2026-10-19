@@ -292,6 +292,26 @@ arrives within 120 s, then prints a welcome with the name HA gives the
 node. `sudo noticom-node reset` asks for confirmation and factory-resets.
 Button pin `none`/`0` means no button.
 
+## Node software updates
+
+- The node's version is `noticom_node.__version__` (= `pyproject.toml`);
+  **bump it with every node change** so HA can offer the update. The
+  integration's `KNOWN_NODE_VERSION` is the newest version at release time.
+- HA reads the newest version from `noticom-node/main/pyproject.toml` on
+  GitHub at startup and every 6 h (keeping the last known on failure).
+- Each node has an `update` entity (installed = version from the node's
+  `auth`, also saved as `sw_version` in the entry and on the device).
+  Install sends `{"t": "update", "ref": "main"}`. The node validates the ref
+  and runs its own installer from the fixed GitHub URL via `systemd-run`
+  (outside the service, since the installer restarts it). HA shows it in
+  progress until the node reconnects on a new version, reports an
+  `update_error`, or 20 minutes pass.
+- Nodes older than 0.3.0 don't know the command; HA refuses and asks for
+  one SSH update instead.
+- The panel's Settings tab shows the install commands (with Copy), each
+  node's version, and **Update all** (WS `noticom/nodes/update`, optional
+  `node_ids`).
+
 ## Hardware notes (ReSpeaker 2-Mic HAT)
 
 Tested on a Pi 3, Raspberry Pi OS based on Debian 13 (trixie), kernel

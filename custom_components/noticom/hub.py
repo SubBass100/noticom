@@ -125,6 +125,9 @@ class NoticomHub:
         from .intercom import Intercom  # noqa: PLC0415 - avoids an import cycle
 
         self.intercom = Intercom(hass, self)
+        from .software import NodeSoftware  # noqa: PLC0415
+
+        self.software = NodeSoftware(hass, self)
 
     async def async_load_settings(self) -> None:
         """Load integration-wide settings."""
@@ -189,6 +192,10 @@ class NoticomHub:
         """Store a node's reported state."""
         if isinstance(caps := state.pop("caps", None), dict):
             self.async_update_caps(link.node_id, caps)
+        updating, error = state.pop("updating", None), state.pop("update_error", None)
+        entry = self.hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, link.node_id)
+        if entry is not None:
+            self.software.node_state(entry, updating, error)
         link.state.update(state)
         async_dispatcher_send(self.hass, signal_update(link.node_id))
 

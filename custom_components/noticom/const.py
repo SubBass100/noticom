@@ -72,3 +72,17 @@ SERVICE_BROADCAST = "broadcast"
 SERVICE_STOP = "stop"
 SERVICE_RELOAD_CHIMES = "reload_chimes"
 ATTR_CHIME = "chime"
+
+# Node software.
+NODE_REPO = "https://github.com/SubBass100/noticom-node"
+NODE_RAW = "https://raw.githubusercontent.com/SubBass100/noticom-node/main"
+NODE_UPDATE_REF = "main"  # what "update" installs
+NODE_VERSION_URL = f"{NODE_RAW}/pyproject.toml"
+KNOWN_NODE_VERSION = "0.3.0"  # newest node version when this integration was released
+MIN_REMOTE_UPDATE_VERSION = "0.3.0"  # first node version that can update itself from HA
+LATEST_CHECK_INTERVAL_S = 6 * 3600
+UPDATE_TIMEOUT_S = 20 * 60  # a Pi 3 can take several minutes
+
+INSTALL_COMMAND = f"curl -sSL {NODE_RAW}/install.sh | sudo bash"
+INSTALL_COMMAND_NO_BUTTON = f"curl -sSL {NODE_RAW}/install.sh | sudo NOTICOM_BUTTON_PIN=none bash"
+PAIR_COMMAND = "sudo noticom-node pair"

@@ -4,7 +4,7 @@
     "step": {
       "adopt": {
         "title": "Adopt Noticom node",
-        "description": "Adopt node **{node_id}**? Give it a name, then press Submit: the node chirps, and you have 60 seconds to press its button to confirm.",
+        "description": "Adopt node **{node_id}**? Give it a name, then press Submit: the node beeps, and you have 60 seconds to press its button. No button, or can't reach it? Run `{pair_command}` on the Pi instead.",
         "data": {
           "name": "Name"
         },
@@ -14,7 +14,7 @@
       },
       "user": {
         "title": "Add a Noticom node",
-        "description": "Nodes on your network usually appear automatically under Discovered. If one doesn't, enter its IP address (run hostname -I on the Pi, or look for \"advertising as … on <address>\" in its log).",
+        "description": "Nodes on your network usually appear automatically under Discovered. If one doesn't, enter its IP address (run hostname -I on the Pi).\n\nSetting up a new Pi? Run this on it first:\n\n`{install_command}`\n\nNo button on it? Use `{install_command_no_button}` and confirm with `{pair_command}`.",
         "data": {
           "host": "IP address"
         }
@@ -78,6 +78,11 @@
             "name": "Playing on"
           }
         }
+      }
+    },
+    "update": {
+      "software": {
+        "name": "Node software"
       }
     }
   },

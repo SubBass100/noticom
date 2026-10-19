@@ -1,8 +1,8 @@
 """The Noticom notification and intercom integration.
 
 Status: discovery, adoption, the node control channel, chimes, the
-push-to-talk intercom and the sidebar panel work. Still to build: admin
-defaults in the panel and media_player entities.
+push-to-talk intercom, the sidebar panel, any-sound-card nodes and node
+software updates work.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from .const import (
     CONF_NODE_PUBKEY,
     CONF_PTT_ENABLED,
     DOMAIN,
+    LATEST_CHECK_INTERVAL_S,
 )
 from .files import NoticomChimeView, NoticomClipUploadView, NoticomClipView
 from .hub import NoticomHub, node_caps
@@ -36,7 +37,13 @@ from .websocket import NoticomWebSocketView
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.NUMBER, Platform.SELECT, Platform.SWITCH]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SWITCH,
+    Platform.UPDATE,
+]
 
 
 @dataclass
@@ -46,6 +53,7 @@ class NodeRuntime:
     node_id: str
     pubkey: str
     hub: NoticomHub
+    pushed: tuple = ()  # settings last sent to the node
 
 
 type NoticomConfigEntry = ConfigEntry[NodeRuntime]
@@ -64,6 +72,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             await hub.async_broadcast_chimes()
 
     async_track_time_interval(hass, _rescan, timedelta(seconds=CHIME_SCAN_INTERVAL_S))
+    # Check GitHub for newer node software now (in the background) and every 6 h.
+    hass.async_create_background_task(hub.software.async_check_latest(), "noticom_check_latest")
+    async_track_time_interval(
+        hass, hub.software.async_check_latest, timedelta(seconds=LATEST_CHECK_INTERVAL_S)
+    )
     hass.http.register_view(NoticomWebSocketView())
     hass.http.register_view(NoticomChimeView())
     hass.http.register_view(NoticomClipUploadView())
@@ -81,6 +94,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NoticomConfigEntry) -> b
         pubkey=entry.data[CONF_NODE_PUBKEY],
         hub=hub,
     )
+    entry.runtime_data.pushed = _pushed_settings(entry)
     _remove_unsupported_entities(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -104,9 +118,19 @@ def _remove_unsupported_entities(hass: HomeAssistant, entry: ConfigEntry) -> Non
             registry.async_remove(entity_id)
 
 
+def _pushed_settings(entry: ConfigEntry) -> tuple:
+    """What a node's config depends on (entry data changes, like its reported
+    version or hardware, don't need a push)."""
+    return (entry.title, tuple(sorted((k, repr(v)) for k, v in entry.options.items())))
+
+
 async def _async_options_updated(hass: HomeAssistant, entry: NoticomConfigEntry) -> None:
     """Push changed settings (or a rename) to the node straight away."""
-    await entry.runtime_data.hub.async_push_config(entry, entry.runtime_data.node_id)
+    runtime = entry.runtime_data
+    if (settings := _pushed_settings(entry)) == runtime.pushed:
+        return
+    runtime.pushed = settings
+    await runtime.hub.async_push_config(entry, runtime.node_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: NoticomConfigEntry) -> bool:

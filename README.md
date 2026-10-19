@@ -59,8 +59,9 @@ settings and so on. Every node you add from now on starts with these.
 ### 3. Add your nodes
 
 Set up a node using the
-[noticom-node instructions](https://github.com/SubBass100/noticom-node).
-Then in Home Assistant:
+[noticom-node instructions](https://github.com/SubBass100/noticom-node). The
+install command is also in **Noticom → Settings → Add a node**, with a
+**Copy** button. Then in Home Assistant:
 
 1. Go to **Settings → Devices & services**. The node shows up under
    **Discovered** within a minute or two.
@@ -153,6 +154,18 @@ still play chimes and other nodes' intercom messages.
 
 The **button wiring** (which pin, and normally open or normally closed) is
 under the node's **Configure** button. Pin 0 means no button.
+
+## Updating nodes
+
+Each node has a **Node software** update in Home Assistant. When a new
+version of the node software is out, it shows up under **Settings →
+Updates** like any other update: click **Install** and the node updates
+itself and restarts (a few minutes on a Pi 3). **Noticom → Settings → Node
+software** lists every node's version, with an **Update all** button.
+
+Nodes on version 0.2.0 or older need one update over SSH first (run the
+install command on them again); after that they can update from Home
+Assistant.
 
 ## Removing or resetting a node
 

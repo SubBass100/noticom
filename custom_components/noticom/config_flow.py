@@ -28,7 +28,10 @@ from .const import (
     CONF_NODE_ID,
     CONF_NODE_PUBKEY,
     DOMAIN,
+    INSTALL_COMMAND,
+    INSTALL_COMMAND_NO_BUTTON,
     NODE_ADOPT_PORT,
+    PAIR_COMMAND,
 )
 from .hub import OPTION_DEFAULTS, node_options
 from .identity import async_get_server_key
@@ -114,6 +117,11 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({vol.Required(CONF_HOST): str}),
+            description_placeholders={
+                "install_command": INSTALL_COMMAND,
+                "install_command_no_button": INSTALL_COMMAND_NO_BUTTON,
+                "pair_command": PAIR_COMMAND,
+            },
             errors=errors,
         )
 
@@ -159,7 +167,7 @@ class NoticomConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="adopt",
             data_schema=vol.Schema({vol.Optional(CONF_NAME, default=default_name): str}),
-            description_placeholders={"node_id": self._node_id or ""},
+            description_placeholders={"node_id": self._node_id or "", "pair_command": PAIR_COMMAND},
             errors=errors,
         )
 

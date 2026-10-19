@@ -21,7 +21,17 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntryState
 
 from .chimes import MAX_UPLOAD_BYTES, ChimeError
-from .const import CONF_INTERCOM_TARGETS, CONF_NODE_ID, CONF_PTT_ENABLED, DOMAIN
+from homeassistant.exceptions import HomeAssistantError
+
+from .const import (
+    CONF_INTERCOM_TARGETS,
+    CONF_NODE_ID,
+    CONF_PTT_ENABLED,
+    DOMAIN,
+    INSTALL_COMMAND,
+    INSTALL_COMMAND_NO_BUTTON,
+    PAIR_COMMAND,
+)
 from .hub import NoticomHub, node_caps, node_options
 from .intercom import TARGETS_ALL
 
@@ -68,6 +78,7 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_intercom_set_targets)
     websocket_api.async_register_command(hass, ws_settings_get)
     websocket_api.async_register_command(hass, ws_settings_set)
+    websocket_api.async_register_command(hass, ws_nodes_update)
 
 
 def chime_list(hub: NoticomHub) -> list[dict[str, Any]]:
@@ -286,6 +297,12 @@ def settings_state(hub: NoticomHub) -> dict[str, Any]:
     """Integration-wide settings shown on the Settings tab."""
     defaults = hub.node_defaults
     return {
+        "commands": {
+            "install": INSTALL_COMMAND,
+            "install_no_button": INSTALL_COMMAND_NO_BUTTON,
+            "pair": PAIR_COMMAND,
+        },
+        "software": software_state(hub),
         "chime_priority": hub.chime_priority,
         "node_defaults": {str(k): defaults[str(k)] for k in NODE_DEFAULTS_SCHEMA.schema},
     }
@@ -321,3 +338,56 @@ async def ws_settings_set(hass: HomeAssistant, connection, msg: dict) -> None:
     if priority_changed:
         await hub.async_push_config_all()
     connection.send_result(msg["id"], settings_state(hub))
+
+
+def software_state(hub: NoticomHub) -> dict[str, Any]:
+    """Newest node version and what each node runs."""
+    nodes = []
+    for entry in hub.hass.config_entries.async_entries(DOMAIN):
+        if entry.state is not ConfigEntryState.LOADED:
+            continue
+        node_id = entry.data[CONF_NODE_ID]
+        nodes.append(
+            {
+                "node_id": node_id,
+                "name": entry.title,
+                "connected": hub.is_connected(node_id),
+                "version": hub.software.installed(entry),
+                "update_available": hub.software.update_available(entry),
+                "remote_update": hub.software.can_update_remotely(entry),
+                "updating": hub.software.in_progress(node_id),
+            }
+        )
+    nodes.sort(key=lambda n: n["name"].lower())
+    return {"latest": hub.software.latest, "nodes": nodes}
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "noticom/nodes/update", vol.Optional("node_ids"): [str]}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_nodes_update(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Update the given nodes, or every online node that's out of date."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    wanted = set(msg.get("node_ids") or [])
+    started, skipped = [], []
+    for node in software_state(hub)["nodes"]:
+        if wanted and node["node_id"] not in wanted:
+            continue
+        if not wanted and not node["update_available"]:
+            continue
+        if node["updating"]:
+            continue
+        if not node["remote_update"]:
+            skipped.append(node["name"])
+            continue
+        try:
+            await hub.software.async_update(node["node_id"])
+        except HomeAssistantError:
+            skipped.append(node["name"])
+        else:
+            started.append(node["name"])
+    connection.send_result(
+        msg["id"], {"started": started, "skipped": skipped, "software": software_state(hub)}
+    )

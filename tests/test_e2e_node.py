@@ -267,3 +267,26 @@ async def test_node_reports_hardware_on_connect(hass, setup):
             "Automatic", "Headphone jack"]
     finally:
         task.cancel()
+
+
+async def test_real_node_receives_update_command(hass, setup):
+    entry, state, pairing = setup
+    node = FakeNode()
+    asked = asyncio.Queue()
+
+    async def on_update(ref):
+        await asked.put(ref)
+        return None
+
+    task = asyncio.create_task(
+        control.ControlClient(state, pairing, node.apply, on_update=on_update).run()
+    )
+    try:
+        await node.next_config()
+        hass.data[DOMAIN].software.latest = "9.9.9"
+        await hass.services.async_call(
+            "update", "install", {"entity_id": "update.hallway_node_software"}, blocking=True
+        )
+        assert await asyncio.wait_for(asked.get(), 3) == "main"
+    finally:
+        task.cancel()

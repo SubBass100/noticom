@@ -34,3 +34,17 @@ def node_entry(hass, node_key):
     )
     entry.add_to_hass(hass)
     return entry
+
+
+@pytest.fixture(autouse=True)
+def no_github(request, monkeypatch):
+    """Don't ask GitHub for the newest node version in tests (opt out with the marker)."""
+    if request.node.get_closest_marker("check_latest"):
+        return
+
+    async def offline(self, _now=None):
+        return None
+
+    from custom_components.noticom.software import NodeSoftware
+
+    monkeypatch.setattr(NodeSoftware, "async_check_latest", offline)

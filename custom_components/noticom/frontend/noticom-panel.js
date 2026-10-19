@@ -92,6 +92,23 @@ const STYLE = `
   .form .val { width: 3.2em; text-align: right; color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
   .form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px 16px; flex-wrap: wrap; }
   .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .cmds { padding: 4px 16px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .cmds > div { min-width: 0; }
+  .cmd-label { font-size: 14px; margin-bottom: 6px; }
+  .cmd { display: flex; align-items: stretch; gap: 8px; }
+  .cmd code {
+    flex: 1; min-width: 0; display: block; padding: 10px 12px; border-radius: 8px;
+    background: var(--secondary-background-color, rgba(0,0,0,.05));
+    border: 1px solid var(--divider-color, rgba(0,0,0,.12));
+    font-size: 13px; line-height: 1.45; overflow-x: auto; white-space: nowrap;
+    user-select: all; -webkit-user-select: all;
+  }
+  .cmd button { flex-shrink: 0; align-self: center; }
+  .sw-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 16px; }
+  .sw-row + .sw-row { border-top: 1px solid var(--divider-color, rgba(0,0,0,.08)); }
+  .sw-row .grow { flex: 1; min-width: 0; }
+  .ok { color: var(--success-color, #43a047); }
+  .warn { color: var(--warning-color, #ffa600); }
   input[type=checkbox] { accent-color: var(--primary-color); width: 18px; height: 18px; flex-shrink: 0; }
   @media (max-width: 600px) {
     .form { grid-template-columns: 1fr; gap: 6px; }
@@ -308,6 +325,19 @@ class NoticomPanel extends HTMLElement {
 
       <section data-panel="settings" hidden>
         <div class="section-head"><h2>Settings</h2></div>
+        <div class="card">
+          <div class="list-head"><span>Add a node</span></div>
+          <p class="hint" style="margin:12px 16px 4px">Run one of these on a fresh Raspberry Pi (over SSH), then add the node under <b>Settings → Devices &amp; services</b>.</p>
+          <div class="cmds st-cmds"></div>
+        </div>
+        <div class="card">
+          <div class="list-head"><span>Node software</span><span class="count st-latest"></span></div>
+          <div class="st-software"><div class="empty">Loading…</div></div>
+          <div class="form-foot" style="padding-top:12px">
+            <span class="hint">Nodes also show up under <b>Settings → Updates</b> when a new version is out.</span>
+            <button class="primary st-update-all" disabled><ha-icon icon="mdi:update"></ha-icon>Update all</button>
+          </div>
+        </div>
         <div class="card pad">
           <label class="switch-row">
             <div>
@@ -368,6 +398,7 @@ class NoticomPanel extends HTMLElement {
     root.querySelector(".st-priority").addEventListener("change", (e) =>
       this._saveSettings({ chime_priority: e.target.checked })
     );
+    root.querySelector(".st-update-all").addEventListener("click", () => this._updateNodes());
     root.querySelector(".st-save").addEventListener("click", () =>
       this._saveSettings({ node_defaults: this._readDefaults() })
     );
@@ -724,8 +755,100 @@ class NoticomPanel extends HTMLElement {
     }
   }
 
+  async _copy(text, button) {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);  // needs https or localhost
+      ok = true;
+    } catch (_err) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      this.shadowRoot.appendChild(area);
+      area.select();
+      try { ok = document.execCommand("copy"); } catch (_e) { ok = false; }
+      area.remove();
+    }
+    if (ok) {
+      const label = button.querySelector(".label");
+      const old = label.textContent;
+      label.textContent = "Copied";
+      setTimeout(() => { label.textContent = old; }, 1500);
+    } else {
+      this._toast("Couldn't copy automatically: select the command and copy it.");
+    }
+  }
+
+  _renderCommands(cmds) {
+    const el = this.shadowRoot.querySelector(".st-cmds");
+    const rows = [
+      ["Node with a button", cmds.install],
+      ["Node without a button (chime-only)", cmds.install_no_button],
+      ["Then, to confirm adding a node without pressing its button", cmds.pair],
+    ];
+    el.innerHTML = rows.map(([label, cmd]) => `
+      <div>
+        <div class="cmd-label">${esc(label)}</div>
+        <div class="cmd"><code>${esc(cmd)}</code>
+          <button class="copy" data-cmd="${esc(cmd)}" aria-label="Copy: ${esc(label)}"><ha-icon icon="mdi:content-copy"></ha-icon><span class="label">Copy</span></button>
+        </div>
+      </div>`).join("");
+    el.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", () => this._copy(b.dataset.cmd, b)));
+  }
+
+  _renderSoftware(sw) {
+    const root = this.shadowRoot;
+    root.querySelector(".st-latest").textContent = sw.latest ? `Newest: ${sw.latest}` : "";
+    const el = root.querySelector(".st-software");
+    if (!sw.nodes.length) {
+      el.innerHTML = `<div class="empty">No nodes yet.</div>`;
+    } else {
+      el.innerHTML = sw.nodes.map((n) => {
+        let status;
+        if (n.updating) status = `<span class="warn">Updating…</span>`;
+        else if (!n.version) status = `<span class="hint">Version unknown</span>`;
+        else if (n.update_available && !n.remote_update) status = `<span class="warn">Update available: run the install command on it once over SSH</span>`;
+        else if (n.update_available) status = `<span class="warn">Update available</span>`;
+        else status = `<span class="ok">Up to date</span>`;
+        const canUpdate = n.update_available && n.remote_update && n.connected && !n.updating;
+        return `
+          <div class="sw-row" data-node="${esc(n.node_id)}">
+            <span class="dot ${n.connected ? "on" : ""}" title="${n.connected ? "Online" : "Offline"}"></span>
+            <div class="grow">
+              <div class="name">${esc(n.name)}</div>
+              <div class="meta">${n.version ? esc(n.version) : "–"} · ${status}${n.update_available && !n.connected ? " · offline" : ""}</div>
+            </div>
+            ${canUpdate ? `<button class="sw-update"><ha-icon icon="mdi:download"></ha-icon><span class="label">Update</span></button>` : ""}
+          </div>`;
+      }).join("");
+      el.querySelectorAll(".sw-update").forEach((b) =>
+        b.addEventListener("click", () => this._updateNodes([b.closest(".sw-row").dataset.node]))
+      );
+    }
+    const outdated = sw.nodes.filter((n) => n.update_available && n.remote_update && n.connected && !n.updating);
+    const all = root.querySelector(".st-update-all");
+    all.disabled = !outdated.length;
+    all.lastChild.textContent = outdated.length > 1 ? `Update all (${outdated.length})` : "Update all";
+  }
+
+  async _updateNodes(nodeIds) {
+    try {
+      const res = await this._hass.callWS({ type: "noticom/nodes/update", ...(nodeIds ? { node_ids: nodeIds } : {}) });
+      this._renderSoftware(res.software);
+      if (res.started.length) this._toast(`Updating ${res.started.join(", ")}. This can take a few minutes.`);
+      if (res.skipped.length) this._toast(`Not updated (offline, or needs one update over SSH): ${res.skipped.join(", ")}`);
+      clearInterval(this._poll);
+      this._poll = setInterval(() => this._loadSettings(), 10000);
+    } catch (err) {
+      this._toast(`Couldn't start the update: ${err.message || err}`);
+    }
+  }
+
   _applySettings(st) {
     const root = this.shadowRoot;
+    if (st.commands) this._renderCommands(st.commands);
+    if (st.software) this._renderSoftware(st.software);
     root.querySelector(".st-priority").checked = st.chime_priority;
     const d = st.node_defaults;
     const set = (id, v) => { root.getElementById(`d-${id}`).value = String(v); };
