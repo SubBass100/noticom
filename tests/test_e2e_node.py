@@ -243,3 +243,27 @@ async def test_intercom_message_between_two_real_nodes(hass, hass_client_no_auth
     finally:
         for task in tasks:
             task.cancel()
+
+
+async def test_node_reports_hardware_on_connect(hass, setup):
+    """The real client sends caps; HA adapts the node's entities."""
+    entry, state, pairing = setup
+    node = FakeNode()
+    caps = {"mic": False, "mic_boost": False, "button": False, "output": "Headphones",
+            "input": None, "outputs": [{"id": "Headphones", "label": "Headphone jack", "kind": "jack"}]}
+    task = asyncio.create_task(
+        control.ControlClient(state, pairing, node.apply, get_caps=lambda: caps).run()
+    )
+    try:
+        await node.next_config()
+        for _ in range(20):
+            await asyncio.sleep(0.05)
+            await hass.async_block_till_done()
+            if entry.data.get("caps") == caps and hass.states.get("number.hallway_mic_gain") is None:
+                break
+        assert entry.data["caps"] == caps
+        assert hass.states.get("number.hallway_mic_gain") is None
+        assert hass.states.get("select.hallway_sound_output").attributes["options"] == [
+            "Automatic", "Headphone jack"]
+    finally:
+        task.cancel()

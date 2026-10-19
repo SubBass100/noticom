@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_MIC_BOOST, CONF_MIC_GAIN, CONF_VOLUME
 from .entity import NoticomEntity
+from .hub import node_caps
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,8 +54,14 @@ NUMBERS = (
 async def async_setup_entry(
     hass: HomeAssistant, entry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
-    """Add the node's settings."""
-    async_add_entities(NoticomNumber(entry, d) for d in NUMBERS)
+    """Add the node's settings (mic ones only if it has a microphone)."""
+    caps = node_caps(entry)
+    wanted = {CONF_VOLUME}
+    if caps["mic"]:
+        wanted.add(CONF_MIC_GAIN)
+    if caps["mic_boost"]:
+        wanted.add(CONF_MIC_BOOST)
+    async_add_entities(NoticomNumber(entry, d) for d in NUMBERS if d.key in wanted)
 
 
 class NoticomNumber(NoticomEntity, NumberEntity):

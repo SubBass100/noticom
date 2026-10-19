@@ -254,6 +254,44 @@ node reports `done`/`dropped`/`error`, or after a 10-minute TTL.
   chimes go after waiting chimes, before waiting clips; never interrupt.
 - **Offline targets:** not queued server-side.
 
+## Sound hardware
+
+A node plays on, and records from, whatever it finds (`soundcards.py`,
+reading `/proc/asound`): **ReSpeaker HAT** > **USB audio** > **headphone
+jack** > **HDMI** for output, and ReSpeaker > USB for input. No input means
+a chime-only node. HA can pin the output with the node's `output_device`
+option (`auto` or an ALSA card id); an unplugged choice falls back to auto.
+
+Levels (`mixer.py`): the ReSpeaker keeps its tuned WM8960 settings (below).
+Other cards get their best playback/capture volume controls from
+`amixer scontents` (preferring Speaker, PCM, Headphone, Master / Mic,
+Capture) set with `amixer -M` (perceptual %), unmuted/capturing where they
+have switches. A card with no playback volume control gets software volume:
+the node scales samples before `aplay`.
+
+Nodes report capabilities in `auth` and `state` as `caps`:
+
+```json
+{"mic": true, "mic_boost": true, "button": true, "output": "seeed2micvoicec",
+ "input": "seeed2micvoicec",
+ "outputs": [{"id": "seeed2micvoicec", "label": "ReSpeaker HAT", "kind": "respeaker"}]}
+```
+
+HA stores them in the entry's data. Mic gain needs `mic`, mic boost needs
+`mic_boost`, Push to talk needs `mic` and `button`; the entry reloads (and
+drops stale entities) when that set changes. Nodes from before caps existed
+are treated as ReSpeaker nodes with a button. The **Sound output** select
+lists `outputs`.
+
+### No button: `noticom-node pair` / `reset`
+
+The service listens on `/run/noticom/control.sock` (mode 0600, root only),
+so using it proves control of the Pi just like the button. `sudo
+noticom-node pair` confirms an adoption request that's waiting now or
+arrives within 120 s, then prints a welcome with the name HA gives the
+node. `sudo noticom-node reset` asks for confirmation and factory-resets.
+Button pin `none`/`0` means no button.
+
 ## Hardware notes (ReSpeaker 2-Mic HAT)
 
 Tested on a Pi 3, Raspberry Pi OS based on Debian 13 (trixie), kernel

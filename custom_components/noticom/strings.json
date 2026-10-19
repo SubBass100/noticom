@@ -36,13 +36,13 @@
     "step": {
       "init": {
         "title": "Button",
-        "description": "How this node's intercom button is wired. The node restarts to apply a change.",
+        "description": "How this node's button is wired. The node restarts to apply a change.",
         "data": {
           "button_pin": "GPIO pin",
           "button_nc": "Normally closed button"
         },
         "data_description": {
-          "button_pin": "BCM GPIO number. 13 is on the HAT's Grove connector; 17 is the HAT's onboard button.",
+          "button_pin": "BCM GPIO number. 13 is on the ReSpeaker HAT's Grove connector; 17 is its onboard button. Use 0 if this node has no button (pair and reset it with sudo noticom-node pair / reset).",
           "button_nc": "Turn on if the pin reads high when the button is pressed (normally closed). Most buttons are normally open."
         }
       }
@@ -68,6 +68,16 @@
     "switch": {
       "ptt_enabled": {
         "name": "Push to talk"
+      }
+    },
+    "select": {
+      "output_device": {
+        "name": "Sound output",
+        "state_attributes": {
+          "playing_on": {
+            "name": "Playing on"
+          }
+        }
       }
     }
   },

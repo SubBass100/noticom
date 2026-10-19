@@ -34,6 +34,10 @@ CONF_PTT_ENABLED = "ptt_enabled"
 CONF_BUTTON_PIN = "button_pin"
 CONF_BUTTON_NC = "button_nc"
 CONF_INTERCOM_TARGETS = "intercom_targets"  # "all" or a list of node ids
+CONF_OUTPUT_DEVICE = "output_device"  # "auto" or an ALSA card id reported by the node
+
+# Config entry data: what the node's hardware can do (reported on connect).
+CONF_CAPS = "caps"
 
 # Storage.
 STORAGE_VERSION = 1

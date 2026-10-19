@@ -22,7 +22,7 @@ from homeassistant.config_entries import ConfigEntryState
 
 from .chimes import MAX_UPLOAD_BYTES, ChimeError
 from .const import CONF_INTERCOM_TARGETS, CONF_NODE_ID, CONF_PTT_ENABLED, DOMAIN
-from .hub import NoticomHub, node_options
+from .hub import NoticomHub, node_caps, node_options
 from .intercom import TARGETS_ALL
 
 _LOGGER = logging.getLogger(__name__)
@@ -196,12 +196,14 @@ def intercom_state(hass: HomeAssistant) -> dict[str, Any]:
         if entry.state is not ConfigEntryState.LOADED:
             continue
         opts = node_options(entry)
+        caps = node_caps(entry)
         node_id = entry.data[CONF_NODE_ID]
         nodes.append(
             {
                 "node_id": node_id,
                 "name": entry.title,
                 "connected": hub.is_connected(node_id),
+                "can_talk": bool(caps["mic"] and caps["button"]),
                 "ptt_enabled": opts[CONF_PTT_ENABLED],
                 "targets": entry.options.get(CONF_INTERCOM_TARGETS, TARGETS_ALL),
             }
@@ -273,7 +275,7 @@ NODE_DEFAULTS_SCHEMA = vol.Schema(
         vol.Required("mic_gain"): vol.All(int, vol.Range(min=0, max=100)),
         vol.Required("mic_boost"): vol.All(int, vol.Range(min=0, max=3)),
         vol.Required("ptt_enabled"): bool,
-        vol.Required("button_pin"): vol.All(int, vol.Range(min=2, max=27)),
+        vol.Required("button_pin"): vol.All(int, vol.Range(min=0, max=27)),  # 0: no button
         vol.Required("button_nc"): bool,
         vol.Required("intercom_targets"): vol.Any(TARGETS_ALL, vol.All([str], vol.Length(max=0))),
     }

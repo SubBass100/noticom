@@ -333,7 +333,7 @@ class NoticomPanel extends HTMLElement {
             <label for="d-ptt_enabled">Push to talk</label>
             <div class="ctl"><input type="checkbox" id="d-ptt_enabled"><span class="hint">Button records intercom messages</span></div>
             <label for="d-button_pin">Button GPIO pin</label>
-            <div class="ctl"><input type="number" id="d-button_pin" min="2" max="27" step="1"><span class="hint">13: HAT Grove connector · 17: HAT onboard button</span></div>
+            <div class="ctl"><input type="number" id="d-button_pin" min="0" max="27" step="1"><span class="hint">13: HAT Grove connector · 17: HAT onboard button · 0: no button</span></div>
             <label for="d-button_nc">Button type</label>
             <div class="ctl"><select id="d-button_nc">
               <option value="false">Normally open (most buttons)</option>
@@ -611,14 +611,18 @@ class NoticomPanel extends HTMLElement {
               <div class="node-name">
                 <span class="dot ${n.connected ? "on" : ""}" title="${n.connected ? "Online" : "Offline"}"></span>
                 <span>${esc(n.name)}</span>
-                ${n.ptt_enabled ? "" : `<span class="badge">Push to talk off</span>`}
+                ${!n.can_talk
+                  ? `<span class="badge">Chime only</span>`
+                  : n.ptt_enabled ? "" : `<span class="badge">Push to talk off</span>`}
               </div>
-              <select class="ic-mode" aria-label="Who ${esc(n.name)} can talk to" ${others.length ? "" : "disabled"}>
+              ${n.can_talk ? `<select class="ic-mode" aria-label="Who ${esc(n.name)} can talk to" ${others.length ? "" : "disabled"}>
                 <option value="all" ${all ? "selected" : ""}>All nodes</option>
                 <option value="some" ${all ? "" : "selected"}>Only selected nodes</option>
-              </select>
+              </select>` : ""}
             </div>
-            ${!others.length
+            ${!n.can_talk
+              ? `<div class="hint" style="margin-top:6px">No microphone or button, so it plays chimes and messages but can't send them.</div>`
+              : !others.length
               ? `<div class="hint" style="margin-top:6px">Add another node to send messages to.</div>`
               : all
                 ? ""
@@ -630,7 +634,7 @@ class NoticomPanel extends HTMLElement {
       }).join("");
       nodesEl.querySelectorAll(".node").forEach((el) => {
         const nodeId = el.dataset.node;
-        el.querySelector(".ic-mode").addEventListener("change", (e) => {
+        el.querySelector(".ic-mode")?.addEventListener("change", (e) => {
           const node = this._intercom.nodes.find((x) => x.node_id === nodeId);
           const current = node.targets === "all" ? [] : node.targets;
           this._setTargets(nodeId, e.target.value === "all" ? "all" : current);
@@ -752,8 +756,8 @@ class NoticomPanel extends HTMLElement {
   async _saveSettings(change) {
     if (change.node_defaults) {
       const pin = change.node_defaults.button_pin;
-      if (!Number.isInteger(pin) || pin < 2 || pin > 27) {
-        this._settingsMsg("Button GPIO pin must be a whole number from 2 to 27.", true);
+      if (!Number.isInteger(pin) || pin < 0 || pin > 27) {
+        this._settingsMsg("Button GPIO pin must be a whole number from 0 (no button) to 27.", true);
         return;
       }
     }

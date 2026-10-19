@@ -117,6 +117,8 @@ class NoticomWebSocketView(HomeAssistantView):
         link = NodeLink(
             node_id=node_id, ws=ws, node_nonce=node_nonce, version=data.get("version", "")
         )
+        if isinstance(caps := data.get("caps"), dict):
+            hass.data[DOMAIN].async_update_caps(node_id, caps)
         await ws.send_str(
             protocol.encode(
                 protocol.T_WELCOME,

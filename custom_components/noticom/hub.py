@@ -19,7 +19,9 @@ from .chimes import ChimeStore
 from .const import (
     CONF_BUTTON_NC,
     CONF_BUTTON_PIN,
+    CONF_CAPS,
     CONF_INTERCOM_TARGETS,
+    CONF_OUTPUT_DEVICE,
     CONF_MIC_BOOST,
     CONF_MIC_GAIN,
     CONF_PTT_ENABLED,
@@ -36,6 +38,20 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Nodes from before capabilities were reported are ReSpeaker nodes with a button.
+CAPS_DEFAULTS: dict[str, Any] = {"mic": True, "mic_boost": True, "button": True, "outputs": []}
+
+
+def node_caps(entry: ConfigEntry) -> dict[str, Any]:
+    """What the node's hardware can do, as last reported."""
+    return {**CAPS_DEFAULTS, **entry.data.get(CONF_CAPS, {})}
+
+
+def entity_shape(caps: dict[str, Any]) -> tuple[bool, bool, bool]:
+    """The capabilities that decide which entities a node has."""
+    return (bool(caps.get("mic")), bool(caps.get("mic_boost")), bool(caps.get("button")))
+
 
 OPTION_DEFAULTS: dict[str, Any] = {
     CONF_VOLUME: DEFAULT_VOLUME,
@@ -69,6 +85,8 @@ def node_config(entry: ConfigEntry, chime_priority: bool = DEFAULT_CHIME_PRIORIT
         "button_pin": opts[CONF_BUTTON_PIN],
         "button_nc": opts[CONF_BUTTON_NC],
         "chime_priority": chime_priority,
+        "output_device": opts.get(CONF_OUTPUT_DEVICE, "auto"),
+        "input_device": "auto",
     }
 
 
@@ -169,8 +187,24 @@ class NoticomHub:
     @callback
     def update_state(self, link: NodeLink, state: dict[str, Any]) -> None:
         """Store a node's reported state."""
+        if isinstance(caps := state.pop("caps", None), dict):
+            self.async_update_caps(link.node_id, caps)
         link.state.update(state)
         async_dispatcher_send(self.hass, signal_update(link.node_id))
+
+    @callback
+    def async_update_caps(self, node_id: str, caps: dict[str, Any]) -> None:
+        """Remember a node's capabilities; reload it if its entities change."""
+        entry = self.hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, node_id)
+        if entry is None or not caps or entry.data.get(CONF_CAPS) == caps:
+            return
+        before = entity_shape(node_caps(entry))
+        self.hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_CAPS: caps})
+        if entity_shape(node_caps(entry)) != before:
+            _LOGGER.info("Node %s hardware changed; updating its entities", entry.title)
+            self.hass.config_entries.async_schedule_reload(entry.entry_id)
+        else:
+            async_dispatcher_send(self.hass, signal_update(node_id))
 
     async def async_send(self, node_id: str, msg_type: str, **fields: Any) -> bool:
         """Send to a node if it's connected."""

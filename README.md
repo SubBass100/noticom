@@ -17,9 +17,12 @@
 - 🖥️ **Everything is managed in Home Assistant.** Upload sounds, choose who
   can talk to whom, and change volume, all from one page.
 
-Each speaker is a small box we call a **node**: a Raspberry Pi with a
-microphone board, a little speaker and a button. You can have as many as
-you like.
+Each speaker is a small box we call a **node**: a Raspberry Pi with
+something to play sound on, and usually a button. You can have as many as
+you like, and mix and match:
+
+- **ReSpeaker HAT** or **USB sound card with a mic**: chimes **and** intercom
+- **The Pi's headphone jack** with powered speakers: chimes only
 
 ## What you need
 
@@ -27,9 +30,10 @@ you like.
   installed.
 - **One or more nodes.** Each one needs:
   - a Raspberry Pi 3 or newer
-  - a ReSpeaker 2-Mic Pi HAT (the Keyestudio version works too)
-  - a small speaker plugged into the HAT
-  - a push button
+  - a ReSpeaker 2-Mic Pi HAT (the Keyestudio version works too) with a
+    small speaker, **or** a USB sound card, **or** powered speakers on the
+    headphone jack
+  - a push button, if you want to use it as an intercom
 
 Building a node is covered in the
 [noticom-node instructions](https://github.com/SubBass100/noticom-node).
@@ -62,7 +66,8 @@ Then in Home Assistant:
    **Discovered** within a minute or two.
 2. Click **Add**, give it a name (usually the room, like *Kitchen*), and
    click **Submit**.
-3. The node beeps. **Press its button within 60 seconds** to confirm.
+3. The node beeps. **Press its button within 60 seconds** to confirm. No
+   button? Run `sudo noticom-node pair` on the Pi instead.
 
 That's it. The node is connected.
 
@@ -140,9 +145,14 @@ Each node appears as a device in Home Assistant with:
 | **Volume** | Speaker volume |
 | **Mic gain** / **Mic boost** | How sensitive the microphone is. Turn these down if messages sound distorted |
 | **Push to talk** | Turn the intercom button on or off |
+| **Sound output** | Which speaker to use if the node has more than one (ReSpeaker, USB, headphone jack, HDMI). *Automatic* picks the best one |
+
+Chime-only nodes (no microphone or no button) don't have the mic and push
+to talk settings, and show as **Chime only** on the Intercom tab. They
+still play chimes and other nodes' intercom messages.
 
 The **button wiring** (which pin, and normally open or normally closed) is
-under the node's **Configure** button.
+under the node's **Configure** button. Pin 0 means no button.
 
 ## Removing or resetting a node
 
@@ -151,6 +161,7 @@ under the node's **Configure** button.
 - **Or reset it from the button:** press it **5 times quickly**. The node
   asks you to **hold the button for 5 seconds** to confirm. If you let go
   early or don't press, nothing happens.
+- **Or from the Pi:** run `sudo noticom-node reset`.
 
 ## Troubleshooting
 

@@ -224,7 +224,7 @@ class NoticomOptionsFlow(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(CONF_BUTTON_PIN, default=opts[CONF_BUTTON_PIN]): vol.All(
-                    vol.Coerce(int), vol.Range(min=2, max=27)
+                    vol.Coerce(int), vol.Range(min=0, max=27)
                 ),
                 vol.Required(CONF_BUTTON_NC, default=opts[CONF_BUTTON_NC]): bool,
             }

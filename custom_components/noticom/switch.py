@@ -11,13 +11,16 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_PTT_ENABLED
 from .entity import NoticomEntity
+from .hub import node_caps
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
-    """Add the node's PTT switch."""
-    async_add_entities([NoticomPttSwitch(entry)])
+    """Add the node's PTT switch, if it has a microphone and a button."""
+    caps = node_caps(entry)
+    if caps["mic"] and caps["button"]:
+        async_add_entities([NoticomPttSwitch(entry)])
 
 
 class NoticomPttSwitch(NoticomEntity, SwitchEntity):
