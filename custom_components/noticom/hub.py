@@ -128,6 +128,9 @@ class NoticomHub:
         from .software import NodeSoftware  # noqa: PLC0415
 
         self.software = NodeSoftware(hass, self)
+        from .themes import ThemeStore  # noqa: PLC0415
+
+        self.themes = ThemeStore(hass, self)
 
     async def async_load_settings(self) -> None:
         """Load integration-wide settings."""
@@ -158,11 +161,11 @@ class NoticomHub:
                 await self.async_push_config(entry, entry.data["node_id"])
 
     async def async_broadcast_chimes(self) -> None:
-        """Send the current chime list to every connected node, and refresh
-        the Play chime action's dropdown."""
-        from .services import async_update_chime_choices  # noqa: PLC0415 - import cycle
+        """Send the current sound library to every connected node.
 
-        async_update_chime_choices(self.hass, [c.name for c in self.chimes.chimes])
+        (The protocol calls these "chimes": nodes keep every sound, so a theme
+        switch never waits for a download.)
+        """
         manifest = self.chimes.manifest()
         for link in list(self.links.values()):
             await link.send(protocol.T_CHIMES, chimes=manifest)

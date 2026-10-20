@@ -89,11 +89,15 @@
   "services": {
     "play_chime": {
       "name": "Play chime",
-      "description": "Plays a chime on Noticom nodes. Target nodes, or leave the target empty to play on all of them.",
+      "description": "Plays a chime on Noticom nodes, using the sound the current theme picks. Target nodes, or leave the target empty to play on all of them.",
       "fields": {
         "chime": {
           "name": "Chime",
-          "description": "Chime name: a file name from /config/noticom/chimes without its extension, e.g. doorbell for doorbell.mp3."
+          "description": "Which chime to play, e.g. doorbell. Manage chimes and themes in the Noticom panel."
+        },
+        "sound": {
+          "name": "Sound (instead of a chime)",
+          "description": "Play this exact sound from the library, ignoring themes."
         }
       }
     },
@@ -103,7 +107,7 @@
     },
     "reload_chimes": {
       "name": "Reload chimes",
-      "description": "Rescans /config/noticom/chimes now instead of waiting for the next automatic scan."
+      "description": "Rescans the sound folder (/config/noticom/chimes) now instead of waiting for the next automatic scan."
     }
   }
 }

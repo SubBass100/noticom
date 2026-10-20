@@ -12,6 +12,9 @@
 
 - 🔔 **Plays sounds when things happen.** Mail arrives, someone rings the
   doorbell, a door opens: pick a sound and pick which rooms hear it.
+- 🎃 **Themes for holidays.** Spooky sounds all October, a harp on
+  Valentine's Day, and your normal sounds the rest of the year. They switch
+  automatically.
 - 🎙️ **Works as an intercom.** Hold the button on any speaker, talk, let go.
   Your message plays in the other rooms.
 - 🖥️ **Everything is managed in Home Assistant.** Upload sounds, choose who
@@ -77,9 +80,63 @@ That's it. The node is connected.
 
 ### 4. Add some sounds
 
-Open **Noticom → Chimes**, drag in a WAV or MP3 file, give it a name like
-*mailbox*, and click **Upload**. You can preview it in your browser or play
-it on all your nodes to test.
+Open **Noticom → Sounds**, drag in a WAV or MP3 file, give it a name like
+*mailbox*, and click **Upload**. Leave **Also make a chime** ticked, and
+it's ready to use in automations. You can preview it in your browser or
+play it on all your nodes to test.
+
+## Chimes, sounds and themes
+
+Three words to know:
+
+- A **sound** is an audio file you uploaded, like *classic-dingdong* or
+  *spooky-doorbell*.
+- A **chime** is the name your automations use, like *doorbell*,
+  *mailbox* or *garbage*.
+- A **theme** decides which sound each chime makes.
+
+Your automations always say "play *doorbell*" and never need changing. The
+theme decides whether that's *classic-dingdong* or *spooky-doorbell*.
+
+| Chime | Default | Halloween | Valentine's Day |
+|---|---|---|---|
+| doorbell | classic-dingdong | spooky-doorbell | cupid-harp |
+| mailbox | soft-ping | creaky-gate | *(uses Default)* |
+| intercom | ding-ding | ghost-whoosh | *(uses Default)* |
+
+**Default** is the catch-all: it plays whenever no other theme is on, and it
+fills in any chime a theme leaves blank. So a holiday theme only needs the
+chimes you want to change.
+
+Everything is on the **Noticom → Themes** tab:
+
+- **The table** has a row per chime and a column per theme. Pick a sound
+  in each box. Under each chime you can see which automations use it
+  (click one to open it).
+- **Add a chime** at the bottom of the table, say *garbage* for a new bin
+  sensor. Pick its Default sound and you're done. Holiday themes play the
+  Default sound until you pick something else for them.
+- **Add a theme**, then click **Edit** to give it dates, like *Oct 1 – Oct
+  31* or *Feb 14*. Dates repeat every year and can cross New Year (*Dec 20 –
+  Jan 2*). You can also limit them to certain hours, like *5 PM – 11 PM*.
+- **When themes overlap**, the shorter date range wins, so a one-day
+  *Birthday* theme beats an all-month *Halloween*. If two ranges are the
+  same length, the theme higher in the list wins (use the arrows to
+  reorder).
+- **To switch by hand**, pick a theme in the **Theme** box at the top (or
+  use the `select.noticom_theme` entity in automations and dashboards).
+  Choose **Automatic** to follow the schedule again.
+  `sensor.noticom_active_theme` shows which theme is playing.
+
+The panel also warns you about problems, like a chime with no Default
+sound, or an automation that plays a chime that doesn't exist (a typo, say).
+
+On the **Sounds** tab you can filter sounds by theme, or show the ones
+that aren't used anywhere. Use **Themes** on a sound to file it under a
+theme, which lists it first when picking sounds for that theme. A sound
+can be used in as many chimes and themes as you like. Deleting a sound
+that's in use tells you where first; holiday themes then go back to their
+Default sound.
 
 ## Playing a sound from an automation
 
@@ -89,7 +146,8 @@ it on all your nodes to test.
 3. Click **+ Choose device** (or area) to pick which nodes play it. **Leave
    it empty to play on every node.**
 
-Here's the same thing in YAML, playing *mailbox* in two rooms:
+The current theme picks the sound. Here's the same thing in YAML, playing
+the *mailbox* chime in two rooms:
 
 ```yaml
 actions:
@@ -102,6 +160,9 @@ actions:
 
 To play in rooms like this, assign each node to an area: **Settings →
 Devices & services → Noticom**, pick the node, and click the pencil.
+
+To play one exact sound and ignore themes, use `sound: spooky-doorbell`
+instead of `chime:`.
 
 **Noticom: Stop** silences nodes right away.
 
@@ -117,7 +178,8 @@ message couldn't be sent, usually because the node is offline.
 
 In **Noticom → Intercom** you can:
 
-- choose the chime that plays before messages
+- choose the sound that plays before messages (themes can change it too:
+  it's the *intercom* chime)
 - choose **who each node can talk to**: all nodes, or only some
 - **listen to recent messages** and see which rooms heard them
 

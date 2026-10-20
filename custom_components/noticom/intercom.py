@@ -131,13 +131,13 @@ class Intercom:
 
     @property
     def chime_name(self) -> str | None:
-        """The chime played before each message (None for no chime)."""
-        return self.hub.settings.get("intercom_chime", DEFAULT_INTERCOM_CHIME)
+        """The Default theme's sound for the intercom chime (None: none)."""
+        themes = self.hub.themes
+        return themes.sound_for(themes.default, DEFAULT_INTERCOM_CHIME)
 
     async def async_set_chime(self, name: str | None) -> None:
-        """Choose the intercom chime."""
-        self.hub.settings["intercom_chime"] = name
-        await self.hub.async_save_settings()
+        """Choose the intercom sound in the Default theme (themes can change it)."""
+        await self.hub.themes.async_set_sound("default", DEFAULT_INTERCOM_CHIME, name)
 
     def targets_for(self, sender: ConfigEntry) -> list[ConfigEntry]:
         """Loaded node entries the sender may talk to, never itself."""
@@ -179,7 +179,8 @@ class Intercom:
         self.clips[clip.id] = clip
         self._prune()
 
-        chime = self.hub.chimes.get(self.chime_name) if self.chime_name else None
+        sound, _theme = self.hub.themes.resolve(DEFAULT_INTERCOM_CHIME)
+        chime = self.hub.chimes.get(sound) if sound else None
         for entry in self.targets_for(sender):
             node_id = entry.data[CONF_NODE_ID]
             job_id = uuid.uuid4().hex

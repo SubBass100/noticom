@@ -6,8 +6,13 @@ play_chime:
       integration: noticom
   fields:
     chime:
-      required: true
+      required: false
       example: doorbell
+      selector:
+        text:
+    sound:
+      required: false
+      advanced: true
       selector:
         text:
 

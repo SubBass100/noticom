@@ -126,7 +126,10 @@ async def test_play_chime_targets_and_reports(
     result = await hass.services.async_call(
         DOMAIN, "play_chime", {"chime": "Doorbell"}, blocking=True, return_response=True
     )
-    assert result == {"chime": "doorbell", "played": ["Hallway"], "offline": []}
+    assert result == {
+        "chime": "doorbell", "sound": "doorbell", "theme": "Default",
+        "played": ["Hallway"], "offline": [],
+    }
     msg = protocol.decode((await ws.receive(timeout=2)).data)
     assert msg["t"] == "play" and msg["kind"] == "chime"
     assert msg["chime_hash"] == hub.chimes.get("doorbell").hash
@@ -174,11 +177,19 @@ async def test_play_chime_action_offers_chime_dropdown(
 
     assert await options() == ["doorbell", "intercom"]
 
-    # Uploading through the panel updates the dropdown straight away.
+    # Uploading a sound as a new chime updates the dropdown straight away.
     import aiohttp
     form = aiohttp.FormData()
     form.add_field("name", "mailbox")
+    form.add_field("make_chime", "true")
     form.add_field("file", write_wav(tmp_path / "m.wav").read_bytes(), filename="m.wav")
     client = await hass_client()
-    assert (await client.post("/api/noticom/panel/chimes", data=form)).status == 200
+    assert (await client.post("/api/noticom/panel/sounds", data=form)).status == 200
+    assert await options() == ["doorbell", "intercom", "mailbox"]
+
+    # A sound uploaded without make_chime isn't a chime.
+    form = aiohttp.FormData()
+    form.add_field("name", "spooky")
+    form.add_field("file", write_wav(tmp_path / "s.wav").read_bytes(), filename="s.wav")
+    assert (await client.post("/api/noticom/panel/sounds", data=form)).status == 200
     assert await options() == ["doorbell", "intercom", "mailbox"]

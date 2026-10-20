@@ -1,7 +1,7 @@
 """The Noticom notification and intercom integration.
 
-Status: discovery, adoption, the node control channel, chimes, the
-push-to-talk intercom, the sidebar panel, any-sound-card nodes and node
+Status: discovery, adoption, the node control channel, chimes and themes,
+the push-to-talk intercom, the sidebar panel, any-sound-card nodes and node
 software updates work.
 """
 
@@ -13,8 +13,9 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import discovery
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
@@ -66,6 +67,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await hub.async_load_settings()
     await hub.chimes.async_scan()
     await hub.intercom.async_load()
+    await hub.themes.async_load()
 
     async def _rescan(_now) -> None:
         if await hub.chimes.async_scan():
@@ -83,6 +85,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.http.register_view(NoticomClipView())
     async_setup_services(hass)
     await async_setup_panel(hass)
+    # Switch themes on schedule (checked every minute) and add the theme
+    # picker and active-theme sensor.
+    async_track_time_change(hass, hub.themes.check_active, second=0)
+    for platform in (Platform.SELECT, Platform.SENSOR):
+        hass.async_create_task(
+            discovery.async_load_platform(hass, platform, DOMAIN, {"themes": True}, config)
+        )
     return True
 
 

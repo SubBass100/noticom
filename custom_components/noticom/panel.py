@@ -34,13 +34,15 @@ from .const import (
 )
 from .hub import NoticomHub, node_caps, node_options
 from .intercom import TARGETS_ALL
+from .themes import INTERCOM_CHIME
+from .usage import find_usage
 
 _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL = "noticom"
 STATIC_URL = "/noticom_static"
-UPLOAD_PATH = "/api/noticom/panel/chimes"
-PREVIEW_PATH = "/api/noticom/panel/chime/{chime_hash}"
+UPLOAD_PATH = "/api/noticom/panel/sounds"
+PREVIEW_PATH = "/api/noticom/panel/sound/{chime_hash}"
 CLIP_PREVIEW_PATH = "/api/noticom/panel/clip/{clip_id}"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
@@ -71,8 +73,11 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     hass.http.register_view(ChimeUploadView())
     hass.http.register_view(ChimePreviewView())
     hass.http.register_view(ClipPreviewView())
-    websocket_api.async_register_command(hass, ws_list_chimes)
-    websocket_api.async_register_command(hass, ws_delete_chime)
+    websocket_api.async_register_command(hass, ws_list_sounds)
+    websocket_api.async_register_command(hass, ws_delete_sound)
+    websocket_api.async_register_command(hass, ws_tag_sound)
+    for command in THEME_COMMANDS:
+        websocket_api.async_register_command(hass, command)
     websocket_api.async_register_command(hass, ws_intercom_get)
     websocket_api.async_register_command(hass, ws_intercom_set_chime)
     websocket_api.async_register_command(hass, ws_intercom_set_targets)
@@ -81,14 +86,16 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_nodes_update)
 
 
-def chime_list(hub: NoticomHub) -> list[dict[str, Any]]:
-    """Chimes as the panel shows them."""
+def sound_list(hub: NoticomHub) -> list[dict[str, Any]]:
+    """The sound library as the panel shows it."""
     return [
         {
             "name": c.name,
             "hash": c.hash,
             "duration": c.duration,
             "file": c.source.name,
+            "themes": hub.themes.sound_themes(c.name),
+            "used": hub.themes.sound_usage(c.name),
         }
         for c in hub.chimes.chimes
     ]
@@ -102,10 +109,15 @@ def _require_admin(request: web.Request) -> web.Response | None:
 
 
 class ChimeUploadView(HomeAssistantView):
-    """POST multipart (file, name, replace) to add a chime."""
+    """POST multipart to add a sound.
+
+    Fields: file, name, replace ("true"), make_chime ("true": also add a chime
+    of the same name that plays it), themes (comma-separated theme ids to
+    file it under).
+    """
 
     url = UPLOAD_PATH
-    name = "api:noticom:panel:chimes"
+    name = "api:noticom:panel:sounds"
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
@@ -130,22 +142,34 @@ class ChimeUploadView(HomeAssistantView):
         if not data:
             return web.json_response({"error": "Choose a file to upload."}, status=400)
         name = fields.get("name") or Path(filename).stem
+        theme_ids = [t for t in fields.get("themes", "").split(",") if t]
         try:
-            chime = await hub.chimes.async_add(
+            for theme_id in theme_ids:
+                hub.themes.theme(theme_id)  # check before saving anything
+            sound = await hub.chimes.async_add(
                 name, filename, data, replace=fields.get("replace") == "true"
             )
         except ChimeError as err:
             return web.json_response({"error": str(err)}, status=400)
         await hub.async_broadcast_chimes()
-        _LOGGER.info("Chime %s uploaded", chime.name)
-        return web.json_response({"chime": chime.name, "chimes": chime_list(hub)})
+        made_chime = None
+        if fields.get("make_chime") == "true" and hub.themes.chime_key(sound.name) is None:
+            made_chime = await hub.themes.async_add_chime(sound.name, sound.name)
+        if theme_ids:
+            await hub.themes.async_tag_sound(
+                sound.name, sorted(set(theme_ids) | set(hub.themes.sound_themes(sound.name)))
+            )
+        _LOGGER.info("Sound %s uploaded", sound.name)
+        return web.json_response(
+            {"sound": sound.name, "chime": made_chime, "sounds": sound_list(hub)}
+        )
 
 
 class ChimePreviewView(HomeAssistantView):
-    """GET a chime's normalized WAV for the panel's preview button."""
+    """GET a sound's normalized WAV for the panel's preview button."""
 
     url = PREVIEW_PATH
-    name = "api:noticom:panel:chime"
+    name = "api:noticom:panel:sound"
     requires_auth = True
 
     async def get(self, request: web.Request, chime_hash: str) -> web.StreamResponse:
@@ -157,30 +181,61 @@ class ChimePreviewView(HomeAssistantView):
         return web.FileResponse(path, headers={"Content-Type": "audio/wav"})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "noticom/chimes/list"})
+def _themes_brief(hub: NoticomHub) -> list[dict[str, str]]:
+    return [{"id": t["id"], "name": t["name"]} for t in hub.themes.all_themes()]
+
+
+@websocket_api.websocket_command({vol.Required("type"): "noticom/sounds/list"})
 @websocket_api.require_admin
 @callback
-def ws_list_chimes(hass: HomeAssistant, connection, msg: dict) -> None:
-    """List chimes."""
-    connection.send_result(msg["id"], {"chimes": chime_list(hass.data[DOMAIN])})
+def ws_list_sounds(hass: HomeAssistant, connection, msg: dict) -> None:
+    """The sound library, and the themes to filter by."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    connection.send_result(msg["id"], {"sounds": sound_list(hub), "themes": _themes_brief(hub)})
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "noticom/chimes/delete", vol.Required("name"): str}
+    {vol.Required("type"): "noticom/sounds/delete", vol.Required("name"): str}
 )
 @websocket_api.require_admin
 @websocket_api.async_response
-async def ws_delete_chime(hass: HomeAssistant, connection, msg: dict) -> None:
-    """Delete a chime."""
+async def ws_delete_sound(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Delete a sound; themes that used it fall back to Default."""
     hub: NoticomHub = hass.data[DOMAIN]
+    sound = hub.chimes.get(msg["name"])
     try:
         await hub.chimes.async_delete(msg["name"])
     except ChimeError as err:
         connection.send_error(msg["id"], "not_found", str(err))
         return
+    used = await hub.themes.async_sound_deleted(sound.name if sound else msg["name"])
     await hub.async_broadcast_chimes()
-    _LOGGER.info("Chime %s deleted", msg["name"])
-    connection.send_result(msg["id"], {"chimes": chime_list(hub)})
+    _LOGGER.info("Sound %s deleted", msg["name"])
+    connection.send_result(
+        msg["id"], {"sounds": sound_list(hub), "themes": _themes_brief(hub), "was_used": used}
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "noticom/sounds/tag",
+        vol.Required("name"): str,
+        vol.Required("themes"): [str],
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_tag_sound(hass: HomeAssistant, connection, msg: dict) -> None:
+    """File a sound under themes."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    try:
+        for theme_id in msg["themes"]:
+            hub.themes.theme(theme_id)
+        await hub.themes.async_tag_sound(msg["name"], msg["themes"])
+    except ChimeError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], {"sounds": sound_list(hub), "themes": _themes_brief(hub)})
 
 
 class ClipPreviewView(HomeAssistantView):
@@ -391,3 +446,146 @@ async def ws_nodes_update(hass: HomeAssistant, connection, msg: dict) -> None:
     connection.send_result(
         msg["id"], {"started": started, "skipped": skipped, "software": software_state(hub)}
     )
+
+
+# ---- Themes tab ------------------------------------------------------------
+
+
+def themes_state(hass: HomeAssistant) -> dict[str, Any]:
+    """Everything the Themes tab shows."""
+    hub: NoticomHub = hass.data[DOMAIN]
+    themes = hub.themes
+    active, reason, rng = themes.active()
+
+    used_by: dict[str, list[dict[str, Any]]] = {c.lower(): [] for c in themes.chimes}
+    unknown, dynamic, direct = [], [], []
+    for use in find_usage(hass):
+        ref = {"name": use["name"], "kind": use["kind"], "edit": use["edit"],
+               "entity_id": use["entity_id"]}
+        for chime in use["chimes"]:
+            if chime is None:
+                dynamic.append(ref)
+            elif chime.startswith("sound:"):
+                direct.append({**ref, "sound": chime[6:]})
+            elif (key := themes.chime_key(chime)) is not None:
+                used_by[key.lower()].append(ref)
+            elif hub.chimes.get(chime) is not None:
+                direct.append({**ref, "sound": chime})
+            else:
+                unknown.append({**ref, "chime": chime})
+    used_by.setdefault(INTERCOM_CHIME, []).insert(
+        0, {"name": "Intercom messages", "kind": "builtin", "edit": None, "entity_id": None}
+    )
+
+    return {
+        "mode": themes.mode,
+        "active": {"id": active["id"], "name": active["name"], "reason": reason, "range": rng},
+        "themes": [
+            {
+                "id": t["id"],
+                "name": t["name"],
+                "default": t is themes.default,
+                "schedule": t.get("schedule", []),
+            }
+            for t in themes.all_themes()
+        ],
+        "chimes": [
+            {
+                "name": c,
+                "builtin": c.lower() == INTERCOM_CHIME,
+                "sounds": {t["id"]: themes.sound_for(t, c) for t in themes.all_themes()},
+                "used_by": used_by.get(c.lower(), []),
+            }
+            for c in themes.chime_names()
+        ],
+        "sounds": [
+            {"name": c.name, "hash": c.hash, "themes": themes.sound_themes(c.name)}
+            for c in hub.chimes.chimes
+        ],
+        "missing": themes.problems(),
+        "unknown": unknown,
+        "dynamic": dynamic,
+        "direct": direct,
+        "calendar": themes.calendar(),
+    }
+
+
+def _theme_command(schema: dict, handler):
+    """Register-able WS command that runs a theme change, then returns the state."""
+
+    @websocket_api.websocket_command(schema)
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def command(hass: HomeAssistant, connection, msg: dict) -> None:
+        try:
+            await handler(hass.data[DOMAIN].themes, msg)
+        except ChimeError as err:
+            connection.send_error(msg["id"], "invalid", str(err))
+            return
+        connection.send_result(msg["id"], themes_state(hass))
+
+    return command
+
+
+async def _noop(themes, msg) -> None:
+    return None
+
+
+RANGE_SCHEMA = vol.Schema(
+    {
+        vol.Required("start"): str,
+        vol.Required("end"): str,
+        vol.Optional("from"): vol.Any(None, str),
+        vol.Optional("to"): vol.Any(None, str),
+    }
+)
+
+THEME_COMMANDS = [
+    _theme_command({vol.Required("type"): "noticom/themes/get"}, _noop),
+    _theme_command(
+        {
+            vol.Required("type"): "noticom/themes/set_sound",
+            vol.Required("theme_id"): str,
+            vol.Required("chime"): str,
+            vol.Required("sound"): vol.Any(None, str),
+        },
+        lambda t, m: t.async_set_sound(m["theme_id"], m["chime"], m["sound"]),
+    ),
+    _theme_command(
+        {
+            vol.Required("type"): "noticom/themes/add_chime",
+            vol.Required("name"): str,
+            vol.Optional("sound"): vol.Any(None, str),
+        },
+        lambda t, m: t.async_add_chime(m["name"], m.get("sound")),
+    ),
+    _theme_command(
+        {vol.Required("type"): "noticom/themes/delete_chime", vol.Required("name"): str},
+        lambda t, m: t.async_delete_chime(m["name"]),
+    ),
+    _theme_command(
+        {vol.Required("type"): "noticom/themes/add", vol.Required("name"): str},
+        lambda t, m: t.async_add_theme(m["name"]),
+    ),
+    _theme_command(
+        {
+            vol.Required("type"): "noticom/themes/update",
+            vol.Required("theme_id"): str,
+            vol.Optional("name"): str,
+            vol.Optional("schedule"): [RANGE_SCHEMA],
+        },
+        lambda t, m: t.async_update_theme(m["theme_id"], m.get("name"), m.get("schedule")),
+    ),
+    _theme_command(
+        {vol.Required("type"): "noticom/themes/delete", vol.Required("theme_id"): str},
+        lambda t, m: t.async_delete_theme(m["theme_id"]),
+    ),
+    _theme_command(
+        {vol.Required("type"): "noticom/themes/reorder", vol.Required("order"): [str]},
+        lambda t, m: t.async_reorder(m["order"]),
+    ),
+    _theme_command(
+        {vol.Required("type"): "noticom/themes/set_mode", vol.Required("mode"): str},
+        lambda t, m: t.async_set_mode(m["mode"]),
+    ),
+]

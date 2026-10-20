@@ -1,4 +1,4 @@
-"""Sound output picker for Noticom nodes."""
+"""Sound output picker for Noticom nodes, and the theme picker."""
 
 from __future__ import annotations
 
@@ -7,9 +7,16 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import CONF_OUTPUT_DEVICE
+from .const import CONF_OUTPUT_DEVICE, DOMAIN
 from .entity import NoticomEntity
 from .hub import node_caps
+from .theme_entities import (
+    AUTOMATIC as THEME_AUTOMATIC,
+    NoticomThemeEntity,
+    theme_mode_current,
+    theme_mode_options,
+)
+from .themes import MODE_AUTO
 
 AUTOMATIC = "Automatic"
 
@@ -76,3 +83,37 @@ class NoticomOutputSelect(NoticomEntity, SelectEntity):
             if value is None:
                 return  # an unplugged card; keep the current choice
         await self.async_set_option(CONF_OUTPUT_DEVICE, value)
+
+
+async def async_setup_platform(hass: HomeAssistant, config, async_add_entities, discovery_info=None) -> None:
+    """The integration-wide theme picker (loaded once from async_setup)."""
+    if discovery_info is None:
+        return
+    async_add_entities([NoticomThemeSelect(hass.data[DOMAIN].themes)])
+
+
+class NoticomThemeSelect(NoticomThemeEntity, SelectEntity):
+    """Automatic (follow the schedule), or force one theme."""
+
+    _attr_name = "Noticom theme"
+    _attr_icon = "mdi:palette-outline"
+
+    def __init__(self, themes) -> None:
+        super().__init__(themes, "theme")
+
+    @property
+    def options(self) -> list[str]:
+        return theme_mode_options(self._themes)
+
+    @property
+    def current_option(self) -> str:
+        return theme_mode_current(self._themes)
+
+    async def async_select_option(self, option: str) -> None:
+        if option == THEME_AUTOMATIC:
+            await self._themes.async_set_mode(MODE_AUTO)
+            return
+        for theme in self._themes.all_themes():
+            if theme["name"] == option:
+                await self._themes.async_set_mode(theme["id"])
+                return

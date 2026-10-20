@@ -1,7 +1,10 @@
-"""Chime storage: the /config/noticom/chimes folder.
+"""The sound library: the /config/noticom/chimes folder.
+
+(Called "chimes" in code and the node protocol for history; the panel calls
+them sounds. Chimes, the names automations use, are in themes.py.)
 
 Drop WAV or MP3 files in the folder; the file name (without extension) is
-the chime's name. Each file is normalized to mono 16-bit WAV, cached by its
+the sound's name. Each file is normalized to mono 16-bit WAV, cached by its
 SHA-256 hash, and synced to nodes by hash. The folder is rescanned
 periodically and on `noticom.reload_chimes`.
 """
@@ -36,7 +39,7 @@ def clean_name(name: str) -> str:
     name = name.strip()
     if not NAME_RE.match(name):
         raise ChimeError(
-            "Chime names can use letters, numbers, spaces, - and _ "
+            "Names can use letters, numbers, spaces, - and _ "
             "(start with a letter or number, up to 48 characters)."
         )
     return name

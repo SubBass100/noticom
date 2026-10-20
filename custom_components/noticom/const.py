@@ -72,6 +72,7 @@ SERVICE_BROADCAST = "broadcast"
 SERVICE_STOP = "stop"
 SERVICE_RELOAD_CHIMES = "reload_chimes"
 ATTR_CHIME = "chime"
+ATTR_SOUND = "sound"
 
 # Node software.
 NODE_REPO = "https://github.com/SubBass100/noticom-node"

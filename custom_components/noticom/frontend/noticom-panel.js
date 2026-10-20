@@ -1,8 +1,23 @@
 // Noticom sidebar panel. Plain web component, no build step.
 // Uses Home Assistant's theme variables so it follows light/dark themes.
 
-const UPLOAD_URL = "/api/noticom/panel/chimes";
-const PREVIEW_URL = (hash) => `/api/noticom/panel/chime/${hash}`;
+const UPLOAD_URL = "/api/noticom/panel/sounds";
+const PREVIEW_URL = (hash) => `/api/noticom/panel/sound/${hash}`;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+// Theme colours (Default is grey). Mid-tone so they read on light and dark.
+const PALETTE = ["#e8710a", "#d01884", "#1a73e8", "#188038", "#9334e6", "#c5221f", "#129eaf", "#b06000"];
+const fmtDay = (mmdd) => {
+  const [m, d] = mmdd.split("-").map(Number);
+  return `${MONTHS[m - 1]} ${d}`;
+};
+const fmtTime = (hhmm) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: "numeric", minute: m ? "2-digit" : undefined });
+};
+const fmtRange = (r) =>
+  (r.start === r.end ? fmtDay(r.start) : `${fmtDay(r.start)} – ${fmtDay(r.end)}`) +
+  (r.from ? `, ${fmtTime(r.from)} – ${fmtTime(r.to)}` : "");
 const CLIP_URL = (id) => `/api/noticom/panel/clip/${id}`;
 const STATUS = {
   sent: "Sending", started: "Playing", done: "Played",
@@ -183,6 +198,64 @@ const STYLE = `
   .empty { padding: 32px 16px; text-align: center; color: var(--secondary-text-color); }
   .empty ha-icon { --mdc-icon-size: 40px; display: block; margin: 0 auto 8px; opacity: .6; }
 
+  /* Themes */
+  .now { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px; }
+  .now-title { font-size: 20px; display: flex; align-items: center; gap: 10px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; display: inline-block; }
+  .year { padding: 0 16px 16px; }
+  .strip { display: flex; height: 18px; border-radius: 6px; overflow: hidden; background: var(--secondary-background-color, rgba(0,0,0,.06)); position: relative; }
+  .strip span { height: 100%; }
+  .strip .today { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--primary-text-color); }
+  .months { display: flex; font-size: 11px; color: var(--secondary-text-color); margin-top: 4px; }
+  .months span { flex: 1; text-align: left; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .warnbox { padding: 12px 16px; border-left: 4px solid var(--warning-color, #ffa600); }
+  .warnbox + .warnbox { border-top: 1px solid var(--divider-color, rgba(0,0,0,.08)); }
+  .warnbox .title { font-weight: 500; margin-bottom: 4px; }
+  .grid-wrap { overflow-x: auto; }
+  table.grid { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .grid th, .grid td { padding: 8px 10px; text-align: left; vertical-align: top; border-top: 1px solid var(--divider-color, rgba(0,0,0,.08)); }
+  .grid thead th { border-top: none; font-weight: 500; white-space: nowrap; color: var(--secondary-text-color); }
+  .grid thead th.on { color: var(--primary-text-color); }
+  .grid th:first-child, .grid td:first-child {
+    position: sticky; left: 0; z-index: 1; min-width: 150px; max-width: 220px;
+    background: var(--ha-card-background, var(--card-background-color, #fff));
+  }
+  .grid td.on { background: color-mix(in srgb, var(--primary-color) 6%, transparent); }
+  .grid .cell { display: flex; align-items: center; gap: 2px; }
+  .grid select { font-size: 14px; padding: 6px 8px; min-width: 120px; width: 100%; }
+  .grid .cell { min-width: 150px; }
+  .theme-row .meta { white-space: normal; }
+  .grid select.inherit { color: var(--secondary-text-color); font-style: italic; }
+  button.mini { height: 32px; width: 32px; padding: 0; justify-content: center; }
+  .chime-name { font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .used { font-size: 12px; color: var(--secondary-text-color); margin-top: 3px; line-height: 1.5; }
+  .used a { color: var(--primary-color); text-decoration: none; }
+  .used a:hover { text-decoration: underline; }
+  .used .none { color: var(--warning-color, #ffa600); }
+  .add-row { display: flex; gap: 10px; align-items: center; padding: 12px 16px; flex-wrap: wrap; border-top: 1px solid var(--divider-color, rgba(0,0,0,.08)); }
+  .add-row input[type=text] { flex: 1 1 200px; }
+  .theme-row { padding: 12px 8px 12px 16px; }
+  .theme-row + .theme-row { border-top: 1px solid var(--divider-color, rgba(0,0,0,.08)); }
+  .theme-head { display: flex; align-items: center; gap: 10px; }
+  .theme-head .grow { flex: 1; min-width: 0; }
+  .theme-head .name { display: flex; align-items: center; gap: 8px; }
+  .editor { margin: 12px 0 4px; display: grid; gap: 10px; padding-right: 8px; }
+  .range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
+  .range select { padding: 6px 8px; font-size: 14px; }
+  .range input[type=time] { font: inherit; font-size: 14px; color: var(--primary-text-color); padding: 5px 6px;
+    background: var(--input-fill-color, var(--secondary-background-color, rgba(0,0,0,.04)));
+    border: 1px solid var(--divider-color, rgba(0,0,0,.2)); border-radius: 8px; }
+  .editor-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+  .editor-foot .msg { flex: 1; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0 2px; }
+  .tags label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+  .tag-editor { padding: 0 16px 12px 16px; }
+  .chip.theme { display: inline-flex; align-items: center; gap: 5px; }
+  .chips { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: middle; }
+  .filter { font-size: 14px; padding: 6px 8px; }
+
   @media (max-width: 600px) {
     main { padding: 16px 8px 40px; }
     li { padding-left: 12px; }
@@ -198,12 +271,18 @@ class NoticomPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._chimes = null;
     this._file = null;
     this._busy = false;
     this._audio = null;
     this._playingKey = null;
-    this._tab = "chimes";
+    this._tab = "themes";
+    this._themes = null;
+    this._sounds = null;
+    this._soundThemes = [];
+    this._filter = "all";
+    this._tagging = null;
+    this._editing = null; // theme id being edited
+    this._draft = null; // {name, schedule} while editing
     this._intercom = null;
     this._poll = null;
   }
@@ -213,7 +292,7 @@ class NoticomPanel extends HTMLElement {
     this._hass = hass;
     if (first) {
       this._render();
-      this._load();
+      this._showTab(this._tab);
     }
     const menu = this.shadowRoot.querySelector("ha-menu-button");
     if (menu) menu.hass = hass;
@@ -232,7 +311,7 @@ class NoticomPanel extends HTMLElement {
   }
 
   connectedCallback() {
-    if (this._hass && this._tab === "intercom") this._showTab("intercom");
+    if (this._hass) this._showTab(this._tab);
   }
 
   _toast(message) {
@@ -241,13 +320,21 @@ class NoticomPanel extends HTMLElement {
 
   async _load() {
     try {
-      const res = await this._hass.callWS({ type: "noticom/chimes/list" });
-      this._chimes = res.chimes;
+      this._setSounds(await this._hass.callWS({ type: "noticom/sounds/list" }));
     } catch (err) {
-      this._chimes = [];
-      this._toast(`Couldn't load chimes: ${err.message || err}`);
+      this._sounds = [];
+      this._toast(`Couldn't load sounds: ${err.message || err}`);
     }
     this._renderList();
+  }
+
+  _setSounds(res) {
+    this._sounds = res.sounds;
+    this._soundThemes = res.themes;
+    if (this._filter !== "all" && this._filter !== "unused" && !res.themes.some((t) => t.id === this._filter)) {
+      this._filter = "all";
+    }
+    this._renderUploadThemes();
   }
 
   _render() {
@@ -259,19 +346,49 @@ class NoticomPanel extends HTMLElement {
         <h1>Noticom</h1>
       </div>
       <nav class="tabs" role="tablist">
-        <button class="tab" role="tab" data-tab="chimes" aria-selected="true">Chimes</button>
+        <button class="tab" role="tab" data-tab="themes" aria-selected="true">Themes</button>
+        <button class="tab" role="tab" data-tab="sounds" aria-selected="false">Sounds</button>
         <button class="tab" role="tab" data-tab="intercom" aria-selected="false">Intercom</button>
         <button class="tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
       </nav>
       <main>
-      <section data-panel="chimes">
+      <section data-panel="themes">
+        <div class="section-head"><h2>Themes</h2></div>
+        <p class="hint" style="margin:0 4px 16px">
+          Automations play <b>chimes</b>, like <i>doorbell</i> or <i>mailbox</i>.
+          Each <b>theme</b> picks which sound a chime makes. Anything a theme
+          leaves blank plays its Default sound, so a holiday theme only needs the
+          chimes you want to change.
+        </p>
+        <div class="card th-now"><div class="empty">Loading…</div></div>
+        <div class="th-warnings"></div>
+        <div class="card">
+          <div class="list-head"><span>Chimes</span><span class="count th-count"></span></div>
+          <div class="th-grid"><div class="empty">Loading…</div></div>
+          <div class="add-row">
+            <input type="text" class="th-new-chime" maxlength="48" placeholder="New chime, e.g. garbage" autocomplete="off" spellcheck="false" aria-label="New chime name">
+            <button class="primary th-add-chime"><ha-icon icon="mdi:plus"></ha-icon>Add chime</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="list-head"><span>Themes and schedule</span></div>
+          <p class="hint" style="margin:12px 16px 4px">When dates overlap, the shorter date range wins. If they're the same length, the theme higher in this list wins.</p>
+          <div class="th-list"></div>
+          <div class="add-row">
+            <input type="text" class="th-new-theme" maxlength="40" placeholder="New theme, e.g. Halloween" autocomplete="off" aria-label="New theme name">
+            <button class="primary th-add-theme"><ha-icon icon="mdi:plus"></ha-icon>Add theme</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-panel="sounds" hidden>
         <div class="section-head">
-          <h2>Chimes</h2>
+          <h2>Sounds</h2>
         </div>
         <p class="hint" style="margin:0 4px 16px">
-          Notification sounds your automations can play on any node with
-          <code>noticom.play_chime</code>. Upload WAV or MP3 files; each is
-          evened out in loudness and copied to every node ahead of time.
+          Your sound library. Upload WAV or MP3 files; each is evened out in
+          loudness and copied to every node ahead of time. Pick which sound
+          each chime plays on the Themes tab.
         </p>
 
         <div class="card upload">
@@ -282,17 +399,20 @@ class NoticomPanel extends HTMLElement {
           </div>
           <input type="file" accept="${ACCEPT}" hidden>
           <div class="row">
-            <label class="field">Chime name
+            <label class="field">Sound name
               <input type="text" class="name-input" maxlength="48" placeholder="e.g. mailbox" autocomplete="off" spellcheck="false">
             </label>
             <button class="primary upload-btn" disabled><ha-icon icon="mdi:check"></ha-icon>Upload</button>
           </div>
-          <label class="replace" hidden><input type="checkbox" class="replace-box"> Replace the existing chime with this name</label>
+          <label class="replace" hidden><input type="checkbox" class="replace-box"> Replace the existing sound with this name</label>
+          <label class="replace make-chime-row"><input type="checkbox" class="make-chime" checked> <span class="make-chime-label">Also make a chime with this name that plays it</span></label>
+          <div class="up-themes" hidden><div class="hint">File under themes:</div><div class="tags up-tags"></div></div>
           <div class="msg" role="status" aria-live="polite"></div>
         </div>
 
         <div class="card">
-          <div class="list-head"><span>Your chimes</span><span class="count"></span></div>
+          <div class="list-head"><span>Your sounds <span class="count snd-count"></span></span>
+            <select class="filter" aria-label="Show sounds"></select></div>
           <div class="list"><div class="empty">Loading…</div></div>
         </div>
       </section>
@@ -308,7 +428,7 @@ class NoticomPanel extends HTMLElement {
           <div class="setting">
             <div>
               <div class="title">Intercom chime</div>
-              <div class="hint">Plays before every message.</div>
+              <div class="hint">Plays before every message. This sets the <i>intercom</i> chime's Default sound; themes can change it.</div>
             </div>
             <select class="ic-chime" aria-label="Intercom chime"></select>
           </div>
@@ -426,6 +546,12 @@ class NoticomPanel extends HTMLElement {
     root.querySelector(".name-input").addEventListener("input", () => this._validate());
     root.querySelector(".replace-box").addEventListener("change", () => this._validate());
     root.querySelector(".upload-btn").addEventListener("click", () => this._upload());
+    root.querySelector(".make-chime").addEventListener("change", (e) => { e.target.dataset.touched = "1"; });
+    root.querySelector(".filter").addEventListener("change", (e) => { this._filter = e.target.value; this._renderList(); });
+    root.querySelector(".th-add-chime").addEventListener("click", () => this._addChime());
+    root.querySelector(".th-new-chime").addEventListener("keydown", (e) => { if (e.key === "Enter") this._addChime(); });
+    root.querySelector(".th-add-theme").addEventListener("click", () => this._addTheme());
+    root.querySelector(".th-new-theme").addEventListener("keydown", (e) => { if (e.key === "Enter") this._addTheme(); });
     root.querySelector(".name-input").addEventListener("keydown", (e) => {
       if (e.key === "Enter") this._upload();
     });
@@ -447,6 +573,8 @@ class NoticomPanel extends HTMLElement {
     const nameInput = root.querySelector(".name-input");
     nameInput.value = suggestName(file.name);
     root.querySelector(".replace-box").checked = false;
+    const make = root.querySelector(".make-chime");
+    if (!make.dataset.touched) make.checked = !this._chosenUploadThemes().length;
     this._message("");
     this._validate();
     nameInput.focus();
@@ -455,7 +583,33 @@ class NoticomPanel extends HTMLElement {
 
   _existing(name) {
     const key = name.trim().toLowerCase();
-    return (this._chimes || []).find((c) => c.name.toLowerCase() === key);
+    return (this._sounds || []).find((c) => c.name.toLowerCase() === key);
+  }
+
+  _chosenUploadThemes() {
+    return [...this.shadowRoot.querySelectorAll(".up-tags input:checked")].map((b) => b.value);
+  }
+
+  _renderUploadThemes() {
+    const root = this.shadowRoot;
+    const others = this._soundThemes.filter((t) => t.id !== "default");
+    const chosen = new Set(this._chosenUploadThemes());
+    root.querySelector(".up-themes").hidden = !others.length;
+    root.querySelector(".up-tags").innerHTML = others.map((t) => `
+      <label><input type="checkbox" value="${esc(t.id)}" ${chosen.has(t.id) ? "checked" : ""}>
+        <span class="swatch" style="background:${this._color(t.id)}"></span>${esc(t.name)}</label>`).join("");
+    root.querySelectorAll(".up-tags input").forEach((box) => box.addEventListener("change", () => {
+      // Holiday sounds usually aren't chimes of their own.
+      const make = root.querySelector(".make-chime");
+      if (!make.dataset.touched) make.checked = !this._chosenUploadThemes().length;
+    }));
+  }
+
+  _color(themeId) {
+    if (themeId === "default") return "var(--disabled-color, #9e9e9e)";
+    const list = (this._themes ? this._themes.themes : this._soundThemes).filter((t) => t.id !== "default");
+    const i = list.findIndex((t) => t.id === themeId);
+    return PALETTE[(i < 0 ? 0 : i) % PALETTE.length];
   }
 
   _validate() {
@@ -464,11 +618,16 @@ class NoticomPanel extends HTMLElement {
     const replaceRow = root.querySelector(".replace");
     const exists = name && this._existing(name);
     replaceRow.hidden = !exists;
+    const chimeTaken = name && this._themes && this._themes.chimes.some((c) => c.name.toLowerCase() === name.toLowerCase());
+    root.querySelector(".make-chime-row").hidden = Boolean(chimeTaken);
+    root.querySelector(".make-chime-label").textContent = name
+      ? `Also make a chime called “${name}” that plays it`
+      : "Also make a chime with this name that plays it";
     let error = "";
     if (name && !NAME_RE.test(name)) {
       error = "Use letters, numbers, spaces, - and _ (start with a letter or number).";
     } else if (exists && !root.querySelector(".replace-box").checked) {
-      error = `A chime named “${exists.name}” already exists.`;
+      error = `A sound named “${exists.name}” already exists.`;
     }
     if (this._file) this._message(error, Boolean(error));
     root.querySelector(".upload-btn").disabled = this._busy || !this._file || !name || Boolean(error);
@@ -488,6 +647,9 @@ class NoticomPanel extends HTMLElement {
     const form = new FormData();
     form.append("name", name);
     form.append("replace", root.querySelector(".replace-box").checked ? "true" : "false");
+    const makeRow = root.querySelector(".make-chime-row");
+    form.append("make_chime", !makeRow.hidden && root.querySelector(".make-chime").checked ? "true" : "false");
+    form.append("themes", this._chosenUploadThemes().join(","));
     form.append("file", this._file, this._file.name);
     this._busy = true;
     btn.disabled = true;
@@ -497,13 +659,16 @@ class NoticomPanel extends HTMLElement {
       const resp = await this._hass.fetchWithAuth(UPLOAD_URL, { method: "POST", body: form });
       const body = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(body.error || `Upload failed (${resp.status})`);
-      this._chimes = body.chimes;
+      this._sounds = body.sounds;
       this._file = null;
+      this._themes = null; // chimes may have changed; reload when shown
       root.querySelector(".drop-title").textContent = "Choose a WAV or MP3 file";
       root.querySelector(".drop-sub").textContent = "or drag one here · up to 10 MB";
       root.querySelector(".name-input").value = "";
       root.querySelector(".replace").hidden = true;
-      this._message(`Added “${body.chime}”. Nodes are downloading it now.`);
+      this._message(body.chime
+        ? `Added the sound and the chime “${body.chime}”. Nodes are downloading it now.`
+        : `Added “${body.sound}”. Nodes are downloading it now. Pick it for a chime on the Themes tab.`);
       this._renderList();
     } catch (err) {
       failure = err.message || String(err);
@@ -517,19 +682,43 @@ class NoticomPanel extends HTMLElement {
   _renderList() {
     const root = this.shadowRoot;
     const list = root.querySelector(".list");
-    const chimes = this._chimes || [];
-    root.querySelector(".count").textContent = chimes.length ? `${chimes.length}` : "";
-    if (!chimes.length) {
-      list.innerHTML = `<div class="empty"><ha-icon icon="mdi:bell-off-outline"></ha-icon>No chimes yet. Upload one above.</div>`;
+    const all = this._sounds || [];
+    const filter = root.querySelector(".filter");
+    filter.innerHTML = [
+      `<option value="all">All sounds</option>`,
+      ...this._soundThemes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} sounds</option>`),
+      `<option value="unused">Not used anywhere</option>`,
+    ].join("");
+    filter.value = this._filter;
+    const sounds = all.filter((c) =>
+      this._filter === "all" ? true
+      : this._filter === "unused" ? !c.used.length
+      : c.themes.includes(this._filter));
+    root.querySelector(".snd-count").textContent = all.length ? `(${sounds.length === all.length ? all.length : `${sounds.length} of ${all.length}`})` : "";
+    if (!all.length) {
+      list.innerHTML = `<div class="empty"><ha-icon icon="mdi:bell-off-outline"></ha-icon>No sounds yet. Upload one above.</div>`;
       return;
     }
-    list.innerHTML = `<ul>${chimes
-      .map(
-        (c) => `
-        <li data-name="${esc(c.name)}" data-hash="${esc(c.hash)}">
+    if (!sounds.length) {
+      list.innerHTML = `<div class="empty">No sounds here.</div>`;
+      return;
+    }
+    const themeName = (id) => (this._soundThemes.find((t) => t.id === id) || {}).name || id;
+    const others = this._soundThemes.filter((t) => t.id !== "default");
+    list.innerHTML = `<ul>${sounds
+      .map((c) => {
+        const used = c.used.length
+          ? `Plays for ${c.used.map((u) => `${esc(u.chime)}${u.theme_id === "default" ? "" : ` (${esc(u.theme)})`}`).join(", ")}`
+          : "Not used by any chime";
+        const chips = c.themes.filter((id) => id !== "default").map((id) =>
+          `<span class="chip theme"><span class="swatch" style="background:${this._color(id)}"></span>${esc(themeName(id))}</span>`).join("");
+        const tagging = this._tagging === c.name;
+        return `
+        <li data-name="${esc(c.name)}" data-hash="${esc(c.hash)}" style="flex-wrap:wrap">
           <div class="info">
             <div class="name">${esc(c.name)}</div>
-            <div class="meta">${c.duration.toFixed(1)} s · <code>chime: ${esc(c.name)}</code></div>
+            <div class="meta">${c.duration.toFixed(1)} s · ${used}</div>
+            ${chips ? `<div class="recips">${chips}</div>` : ""}
           </div>
           <div class="actions">
             <button class="preview icon-only-narrow" aria-label="Preview ${esc(c.name)} here">
@@ -538,19 +727,50 @@ class NoticomPanel extends HTMLElement {
             <button class="test icon-only-narrow" aria-label="Play ${esc(c.name)} on all nodes">
               <ha-icon icon="mdi:bullhorn-outline"></ha-icon><span class="label">Play on nodes</span>
             </button>
+            ${others.length ? `<button class="tag icon-only-narrow" aria-label="Themes for ${esc(c.name)}" aria-expanded="${tagging}">
+              <ha-icon icon="mdi:palette-outline"></ha-icon><span class="label">Themes</span>
+            </button>` : ""}
             <button class="danger delete icon-only-narrow" aria-label="Delete ${esc(c.name)}">
               <ha-icon icon="mdi:delete-outline"></ha-icon><span class="label">Delete</span>
             </button>
           </div>
-        </li>`
-      )
+          ${tagging ? `<div class="tag-editor" style="flex-basis:100%;padding-left:0">
+            <div class="hint">File this sound under (it's also counted in any theme that uses it):</div>
+            <div class="tags">${others.map((t) => {
+              const usedHere = c.used.some((u) => u.theme_id === t.id);
+              return `<label ${usedHere ? `title="It plays for a chime in ${esc(t.name)}"` : ""}><input type="checkbox" value="${esc(t.id)}"
+                ${c.themes.includes(t.id) ? "checked" : ""} ${usedHere ? "disabled data-used" : ""}>
+              <span class="swatch" style="background:${this._color(t.id)}"></span>${esc(t.name)}${usedHere ? ` <span class="hint">(in use)</span>` : ""}</label>`;
+            }).join("")}</div>
+          </div>` : ""}
+        </li>`;
+      })
       .join("")}</ul>`;
     list.querySelectorAll("li").forEach((li) => {
       const { name, hash } = li.dataset;
       li.querySelector(".preview").addEventListener("click", () => this._preview(hash, PREVIEW_URL(hash)));
-      li.querySelector(".test").addEventListener("click", () => this._playOnNodes(name));
+      li.querySelector(".test").addEventListener("click", () => this._playOnNodes({ sound: name }));
+      li.querySelector(".tag")?.addEventListener("click", () => {
+        this._tagging = this._tagging === name ? null : name;
+        this._renderList();
+      });
+      li.querySelectorAll(".tag-editor input").forEach((box) => box.addEventListener("change", () => {
+        const chosen = [...li.querySelectorAll(".tag-editor input:checked:not([data-used])")].map((b) => b.value);
+        this._tagSound(name, chosen);
+      }));
       li.querySelector(".delete").addEventListener("click", () => this._delete(name));
     });
+  }
+
+  async _tagSound(name, themes) {
+    try {
+      this._setSounds(await this._hass.callWS({ type: "noticom/sounds/tag", name, themes }));
+      this._themes = null;
+      this._renderList();
+    } catch (err) {
+      this._toast(`Couldn't save: ${err.message || err}`);
+      this._load();
+    }
   }
 
   _stopPreview() {
@@ -563,7 +783,8 @@ class NoticomPanel extends HTMLElement {
   }
 
   _rerenderPlayback() {
-    this._renderList();
+    if (this._tab === "sounds") this._renderList();
+    if (this._tab === "themes" && this._themes) this._renderGrid();
     if (this._intercom) this._renderMessages();
   }
 
@@ -588,6 +809,389 @@ class NoticomPanel extends HTMLElement {
     }
   }
 
+  /* ---------- Themes tab ---------- */
+
+  async _loadThemes(quiet = false) {
+    try {
+      this._themes = await this._hass.callWS({ type: "noticom/themes/get" });
+    } catch (err) {
+      if (!quiet) this._toast(`Couldn't load themes: ${err.message || err}`);
+      return;
+    }
+    this._renderThemes();
+  }
+
+  async _themeWS(msg, done) {
+    try {
+      this._themes = await this._hass.callWS(msg);
+      this._sounds = null; // usage changed; Sounds tab reloads when shown
+      if (done) done();
+      this._renderThemes();
+      return true;
+    } catch (err) {
+      this._toast(err.message || String(err));
+      return false;
+    }
+  }
+
+  _navigate(path) {
+    history.pushState(null, "", path);
+    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+  }
+
+  _usageLinks(list) {
+    return list.map((u) => u.edit
+      ? `<a href="${esc(u.edit)}" data-nav="${esc(u.edit)}">${esc(u.name)}</a>`
+      : esc(u.name)).join(", ");
+  }
+
+  _bindNav(el) {
+    el.querySelectorAll("a[data-nav]").forEach((a) => a.addEventListener("click", (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
+      e.preventDefault();
+      this._navigate(a.dataset.nav);
+    }));
+  }
+
+  _renderThemes() {
+    if (!this._themes) return;
+    this._renderNow();
+    this._renderWarnings();
+    this._renderGrid();
+    this._renderThemeList();
+    if (this._file) this._validate();
+  }
+
+  _renderNow() {
+    const th = this._themes;
+    const el = this.shadowRoot.querySelector(".th-now");
+    const a = th.active;
+    const why = a.reason === "manual" ? "Chosen by hand"
+      : a.reason === "schedule" ? `Scheduled ${esc(fmtRange(a.range))}`
+      : "No theme is scheduled right now";
+    const now = new Date();
+    const doy = (m, d) => { // day of year in a leap year, 1-based
+      let n = d;
+      for (let i = 0; i < m - 1; i++) n += MONTH_DAYS[i];
+      return n;
+    };
+    const today = doy(now.getMonth() + 1, now.getDate());
+    const scheduled = th.themes.filter((t) => !t.default && t.schedule.length);
+    el.innerHTML = `
+      <div class="now">
+        <div>
+          <div class="hint">Playing now</div>
+          <div class="now-title"><span class="swatch" style="background:${this._color(a.id)}"></span>${esc(a.name)}</div>
+          <div class="hint">${why}</div>
+        </div>
+        <label class="hint" style="display:grid;gap:4px">Theme
+          <select class="th-mode">
+            <option value="auto">Automatic (follow the schedule)</option>
+            ${th.themes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} only</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <div class="year">
+        <div class="strip" role="img" aria-label="Which theme plays on each day of the year">
+          ${th.calendar.map((r) => `<span style="width:${(r.days / 366) * 100}%;background:${this._color(r.theme_id)};${r.theme_id === "default" ? "opacity:.35" : ""}"
+             title="${esc((th.themes.find((t) => t.id === r.theme_id) || {}).name || "")}: ${esc(r.start === r.end ? fmtDay(r.start) : `${fmtDay(r.start)} – ${fmtDay(r.end)}`)}"></span>`).join("")}
+          <span class="today" style="left:calc(${((today - 0.5) / 366) * 100}% - 1px)" title="Today"></span>
+        </div>
+        <div class="months">${MONTHS.map((m) => `<span>${m}</span>`).join("")}</div>
+        ${scheduled.length ? `<div class="legend">${scheduled.map((t) =>
+          `<span><span class="swatch" style="background:${this._color(t.id)}"></span>${esc(t.name)}</span>`).join("")}
+          <span><span class="swatch" style="background:${this._color("default")};opacity:.35"></span>Default</span></div>`
+        : `<div class="hint" style="margin-top:8px">Add a theme below and give it dates to see it here.</div>`}
+      </div>`;
+    const mode = el.querySelector(".th-mode");
+    mode.value = th.mode;
+    mode.addEventListener("change", () =>
+      this._themeWS({ type: "noticom/themes/set_mode", mode: mode.value }, () =>
+        this._toast(mode.value === "auto" ? "Following the schedule" : "Theme changed")));
+  }
+
+  _renderWarnings() {
+    const th = this._themes;
+    const el = this.shadowRoot.querySelector(".th-warnings");
+    const boxes = [];
+    if (th.missing.length) {
+      boxes.push(`<div class="warnbox"><div class="title">No Default sound</div>
+        <div class="hint">${th.missing.map((c) => `<b>${esc(c)}</b>`).join(", ")} ${th.missing.length > 1 ? "have" : "has"} no sound in the Default theme, so ${th.missing.length > 1 ? "they play" : "it plays"} nothing when no other theme sets one. Pick a sound below.</div></div>`);
+    }
+    for (const u of th.unknown) {
+      boxes.push(`<div class="warnbox"><div class="title">Unknown chime</div>
+        <div class="hint used" style="font-size:14px">${this._usageLinks([u])} plays “${esc(u.chime)}”, but there's no chime with that name. Fix the ${u.kind}, or add the chime below.</div></div>`);
+    }
+    const info = [];
+    if (th.dynamic.length) {
+      info.push(`${this._usageLinks(th.dynamic)} ${th.dynamic.length > 1 ? "pick their" : "picks its"} chime with a template, so ${th.dynamic.length > 1 ? "they" : "it"} can't be listed under a chime.`);
+    }
+    if (th.direct.length) {
+      info.push(`${th.direct.map((u) => `${this._usageLinks([u])} plays the sound “${esc(u.sound)}” directly`).join("; ")}, so themes don't change ${th.direct.length > 1 ? "them" : "it"}.`);
+    }
+    if (info.length) {
+      boxes.push(`<div class="warnbox" style="border-left-color:var(--info-color, #039be5)"><div class="used" style="font-size:14px">${info.join("<br>")}</div></div>`);
+    }
+    el.innerHTML = boxes.length ? `<div class="card">${boxes.join("")}</div>` : "";
+    this._bindNav(el);
+  }
+
+  _soundOptions(theme, chime) {
+    const th = this._themes;
+    const picked = chime.sounds[theme.id] || "";
+    const opt = (n) => `<option value="${esc(n.name)}" ${n.name === picked ? "selected" : ""}>${esc(n.name)}</option>`;
+    if (theme.default) {
+      return `<option value="" ${picked ? "" : "selected"}>${chime.builtin ? "No sound" : "No sound (pick one)"}</option>` +
+        th.sounds.map(opt).join("");
+    }
+    const mine = th.sounds.filter((n) => n.themes.includes(theme.id));
+    const rest = th.sounds.filter((n) => !n.themes.includes(theme.id));
+    const fallback = chime.sounds.default;
+    return `<option value="" ${picked ? "" : "selected"}>Default (${esc(fallback || "no sound")})</option>` +
+      (mine.length
+        ? `<optgroup label="${esc(theme.name)} sounds">${mine.map(opt).join("")}</optgroup><optgroup label="Other sounds">${rest.map(opt).join("")}</optgroup>`
+        : rest.map(opt).join(""));
+  }
+
+  _renderGrid() {
+    const th = this._themes;
+    const root = this.shadowRoot;
+    const el = root.querySelector(".th-grid");
+    root.querySelector(".th-count").textContent = `${th.chimes.length} chime${th.chimes.length === 1 ? "" : "s"}`;
+    const hashOf = (name) => (th.sounds.find((n) => n.name === name) || {}).hash;
+    el.innerHTML = `<div class="grid-wrap"><table class="grid">
+      <thead><tr><th scope="col">Chime</th>${th.themes.map((t) => `
+        <th scope="col" class="${t.id === th.active.id ? "on" : ""}"><span class="swatch" style="background:${this._color(t.id)}"></span> ${esc(t.name)}${t.id === th.active.id ? " · now" : ""}</th>`).join("")}</tr></thead>
+      <tbody>${th.chimes.map((c) => {
+        const users = c.used_by.length
+          ? `Used by ${this._usageLinks(c.used_by)}`
+          : `<span class="none">Not used by any automation yet</span>`;
+        return `<tr data-chime="${esc(c.name)}">
+          <th scope="row">
+            <div class="chime-name">${esc(c.name)}
+              <button class="mini play-chime" title="Play on all nodes (current theme)" aria-label="Play ${esc(c.name)} on all nodes"><ha-icon icon="mdi:bullhorn-outline"></ha-icon></button>
+              ${c.builtin ? "" : `<button class="mini danger del-chime" title="Delete chime" aria-label="Delete chime ${esc(c.name)}"><ha-icon icon="mdi:delete-outline"></ha-icon></button>`}
+            </div>
+            <div class="used">${users}</div>
+          </th>
+          ${th.themes.map((t) => {
+            const effective = c.sounds[t.id] || c.sounds.default;
+            const hash = effective && hashOf(effective);
+            const playing = hash && this._playingKey === hash;
+            return `<td class="${t.id === th.active.id ? "on" : ""}"><div class="cell">
+              <select data-theme="${esc(t.id)}" class="${!t.default && !c.sounds[t.id] ? "inherit" : ""}" aria-label="${esc(c.name)} in ${esc(t.name)}">${this._soundOptions(t, c)}</select>
+              <button class="mini preview-cell" data-hash="${esc(hash || "")}" ${hash ? "" : "disabled"} aria-label="Preview"><ha-icon icon="${playing ? "mdi:stop" : "mdi:play"}"></ha-icon></button>
+            </div></td>`;
+          }).join("")}
+        </tr>`;
+      }).join("")}</tbody></table></div>`;
+    this._bindNav(el);
+    el.querySelectorAll("tr[data-chime]").forEach((tr) => {
+      const chime = tr.dataset.chime;
+      tr.querySelector(".play-chime").addEventListener("click", () => this._playOnNodes({ chime }));
+      tr.querySelector(".del-chime")?.addEventListener("click", () => this._deleteChime(chime));
+      tr.querySelectorAll("select").forEach((sel) => sel.addEventListener("change", () =>
+        this._themeWS({ type: "noticom/themes/set_sound", theme_id: sel.dataset.theme, chime, sound: sel.value || null })));
+      tr.querySelectorAll(".preview-cell").forEach((b) => b.addEventListener("click", () => {
+        if (b.dataset.hash) this._preview(b.dataset.hash, PREVIEW_URL(b.dataset.hash));
+      }));
+    });
+  }
+
+  _renderThemeList() {
+    const th = this._themes;
+    const el = this.shadowRoot.querySelector(".th-list");
+    const others = th.themes.filter((t) => !t.default);
+    const def = th.themes.find((t) => t.default);
+    const rows = others.map((t, i) => {
+      const editing = this._editing === t.id;
+      const when = t.schedule.length ? t.schedule.map(fmtRange).join(" · ") : "No dates: plays only when chosen by hand";
+      return `<div class="theme-row" data-theme="${esc(t.id)}">
+        <div class="theme-head">
+          <span class="swatch" style="background:${this._color(t.id)}"></span>
+          <div class="grow">
+            <div class="name">${esc(t.name)}${t.id === th.active.id ? ` <span class="badge">Playing now</span>` : ""}</div>
+            <div class="meta">${esc(when)}</div>
+          </div>
+          <div class="actions">
+            <button class="mini th-up" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(t.name)} up" title="Higher priority"><ha-icon icon="mdi:arrow-up"></ha-icon></button>
+            <button class="mini th-down" ${i === others.length - 1 ? "disabled" : ""} aria-label="Move ${esc(t.name)} down" title="Lower priority"><ha-icon icon="mdi:arrow-down"></ha-icon></button>
+            <button class="th-edit icon-only-narrow" aria-expanded="${editing}"><ha-icon icon="mdi:calendar-edit"></ha-icon><span class="label">${editing ? "Close" : "Edit"}</span></button>
+            <button class="danger th-del icon-only-narrow" aria-label="Delete ${esc(t.name)}"><ha-icon icon="mdi:delete-outline"></ha-icon><span class="label">Delete</span></button>
+          </div>
+        </div>
+        ${editing ? this._editorHTML() : ""}
+      </div>`;
+    });
+    rows.push(`<div class="theme-row"><div class="theme-head">
+        <span class="swatch" style="background:${this._color("default")}"></span>
+        <div class="grow"><div class="name">${esc(def.name)}${def.id === th.active.id ? ` <span class="badge">Playing now</span>` : ""}</div>
+        <div class="meta">Plays whenever no other theme does, and fills in anything a theme leaves blank.</div></div>
+      </div></div>`);
+    if (!others.length) {
+      rows.unshift(`<div class="hint" style="padding:8px 16px">No themes yet. Add one below, for example <i>Halloween</i>, then pick its sounds in the table above and give it dates.</div>`);
+    }
+    el.innerHTML = rows.join("");
+    el.querySelectorAll(".theme-row[data-theme]").forEach((row) => {
+      const id = row.dataset.theme;
+      const order = others.map((t) => t.id);
+      const move = (delta) => {
+        const i = order.indexOf(id);
+        order.splice(i, 1);
+        order.splice(i + delta, 0, id);
+        this._themeWS({ type: "noticom/themes/reorder", order });
+      };
+      row.querySelector(".th-up").addEventListener("click", () => move(-1));
+      row.querySelector(".th-down").addEventListener("click", () => move(1));
+      row.querySelector(".th-edit").addEventListener("click", () => {
+        if (this._editing === id) { this._editing = null; this._draft = null; }
+        else {
+          const t = others.find((x) => x.id === id);
+          this._editing = id;
+          this._draft = { name: t.name, schedule: t.schedule.map((r) => ({ ...r, hours: Boolean(r.from) })) };
+        }
+        this._renderThemeList();
+      });
+      row.querySelector(".th-del").addEventListener("click", () => this._deleteTheme(id));
+      if (this._editing === id) this._bindEditor(row);
+    });
+  }
+
+  _editorHTML() {
+    const d = this._draft;
+    const monthSel = (cls, i, mmdd) => {
+      const m = Number(mmdd.split("-")[0]);
+      return `<select class="${cls}-m" data-i="${i}" aria-label="Month">${MONTHS.map((n, k) =>
+        `<option value="${k + 1}" ${k + 1 === m ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+    };
+    const daySel = (cls, i, mmdd) => {
+      const [m, day] = mmdd.split("-").map(Number);
+      return `<select class="${cls}-d" data-i="${i}" aria-label="Day">${Array.from({ length: MONTH_DAYS[m - 1] }, (_, k) =>
+        `<option value="${k + 1}" ${k + 1 === day ? "selected" : ""}>${k + 1}</option>`).join("")}</select>`;
+    };
+    return `<div class="editor">
+      <label class="field" style="max-width:340px">Name
+        <input type="text" class="ed-name" maxlength="40" value="${esc(d.name)}">
+      </label>
+      <div class="hint">Dates (every year):</div>
+      ${d.schedule.length ? d.schedule.map((r, i) => `
+        <div class="range">
+          ${monthSel("ed-start", i, r.start)} ${daySel("ed-start", i, r.start)}
+          <span>to</span>
+          ${monthSel("ed-end", i, r.end)} ${daySel("ed-end", i, r.end)}
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" class="ed-hours" data-i="${i}" ${r.hours ? "checked" : ""}>only between</label>
+          ${r.hours ? `<input type="time" class="ed-from" data-i="${i}" value="${esc(r.from || "17:00")}" aria-label="From">
+            <span>and</span>
+            <input type="time" class="ed-to" data-i="${i}" value="${esc(r.to || "23:00")}" aria-label="Until">` : ""}
+          <button class="mini danger ed-remove" data-i="${i}" aria-label="Remove these dates"><ha-icon icon="mdi:close"></ha-icon></button>
+        </div>`).join("") : `<div class="hint">No dates yet: this theme only plays when you choose it by hand.</div>`}
+      <div><button class="ed-add"><ha-icon icon="mdi:calendar-plus"></ha-icon>Add dates</button></div>
+      <div class="editor-foot">
+        <span class="msg ed-msg" role="status"></span>
+        <button class="ed-cancel">Cancel</button>
+        <button class="primary ed-save"><ha-icon icon="mdi:content-save"></ha-icon>Save</button>
+      </div>
+    </div>`;
+  }
+
+  _bindEditor(row) {
+    const d = this._draft;
+    const pad = (n) => String(n).padStart(2, "0");
+    const read = (cls, i) => {
+      const m = Number(row.querySelector(`.${cls}-m[data-i="${i}"]`).value);
+      const day = Math.min(Number(row.querySelector(`.${cls}-d[data-i="${i}"]`).value), MONTH_DAYS[m - 1]);
+      return `${pad(m)}-${pad(day)}`;
+    };
+    row.querySelector(".ed-name").addEventListener("input", (e) => { d.name = e.target.value; });
+    row.querySelectorAll(".range select").forEach((sel) => sel.addEventListener("change", () => {
+      const i = Number(sel.dataset.i);
+      const before = d.schedule[i].start;
+      d.schedule[i].start = read("ed-start", i);
+      d.schedule[i].end = sel.className.startsWith("ed-start") && d.schedule[i].end === before
+        ? d.schedule[i].start // moving a one-day range keeps it one day
+        : read("ed-end", i);
+      if (sel.className.endsWith("-m")) this._renderThemeList(); // day list depends on the month
+    }));
+    row.querySelectorAll(".ed-hours").forEach((box) => box.addEventListener("change", () => {
+      const r = d.schedule[Number(box.dataset.i)];
+      r.hours = box.checked;
+      if (r.hours) { r.from = r.from || "17:00"; r.to = r.to || "23:00"; }
+      this._renderThemeList();
+    }));
+    row.querySelectorAll(".ed-from, .ed-to").forEach((inp) => inp.addEventListener("change", () => {
+      d.schedule[Number(inp.dataset.i)][inp.classList.contains("ed-from") ? "from" : "to"] = inp.value;
+    }));
+    row.querySelectorAll(".ed-remove").forEach((b) => b.addEventListener("click", () => {
+      d.schedule.splice(Number(b.dataset.i), 1);
+      this._renderThemeList();
+    }));
+    row.querySelector(".ed-add").addEventListener("click", () => {
+      const now = new Date();
+      const today = `${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      d.schedule.push({ start: today, end: today, from: null, to: null, hours: false });
+      this._renderThemeList();
+    });
+    row.querySelector(".ed-cancel").addEventListener("click", () => {
+      this._editing = null; this._draft = null; this._renderThemeList();
+    });
+    row.querySelector(".ed-save").addEventListener("click", async () => {
+      const schedule = d.schedule.map((r) => ({
+        start: r.start, end: r.end, from: r.hours ? r.from : null, to: r.hours ? r.to : null,
+      }));
+      const id = this._editing;
+      const ok = await this._themeWS(
+        { type: "noticom/themes/update", theme_id: id, name: d.name, schedule },
+        () => { this._editing = null; this._draft = null; });
+      if (ok) this._toast("Theme saved");
+    });
+  }
+
+  async _addChime() {
+    const input = this.shadowRoot.querySelector(".th-new-chime");
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    if (!NAME_RE.test(name)) {
+      this._toast("Chime names can use letters, numbers, spaces, - and _ (start with a letter or number).");
+      return;
+    }
+    // A sound with the same name becomes its Default sound.
+    const same = this._themes.sounds.find((n) => n.name.toLowerCase() === name.toLowerCase());
+    await this._themeWS({ type: "noticom/themes/add_chime", name, sound: same ? same.name : null }, () => {
+      input.value = "";
+      this._toast(same ? `Added “${name}”, playing the sound “${same.name}”` : `Added “${name}”. Pick its Default sound in the table.`);
+    });
+  }
+
+  async _deleteChime(name) {
+    const c = this._themes.chimes.find((x) => x.name === name);
+    const users = c && c.used_by.length ? `\n\nStill used by: ${c.used_by.map((u) => u.name).join(", ")}. Those will fail until you change them.` : "";
+    if (!confirm(`Delete the chime “${name}” from every theme? Its sounds stay in the library.${users}`)) return;
+    await this._themeWS({ type: "noticom/themes/delete_chime", name });
+  }
+
+  async _addTheme() {
+    const input = this.shadowRoot.querySelector(".th-new-theme");
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    await this._themeWS({ type: "noticom/themes/add", name }, () => {
+      input.value = "";
+      const added = this._themes.themes.find((t) => t.name === name);
+      if (added) {
+        this._editing = added.id;
+        this._draft = { name: added.name, schedule: [] };
+      }
+      this._toast(`Added “${name}”. Pick its sounds in the table, and add dates.`);
+    });
+  }
+
+  async _deleteTheme(id) {
+    const t = this._themes.themes.find((x) => x.id === id);
+    if (!confirm(`Delete the theme “${t.name}”? Its sounds stay in the library.`)) return;
+    await this._themeWS({ type: "noticom/themes/delete", theme_id: id }, () => {
+      if (this._editing === id) { this._editing = null; this._draft = null; }
+    });
+  }
+
   /* ---------- Intercom tab ---------- */
 
   _showTab(tab) {
@@ -602,8 +1206,12 @@ class NoticomPanel extends HTMLElement {
       this._poll = setInterval(() => this._loadIntercom(), 10000);
     } else if (tab === "settings") {
       this._loadSettings();
+    } else if (tab === "themes") {
+      this._loadThemes();
+      this._poll = setInterval(() => { if (!this._editing) this._loadThemes(); }, 60000);
     } else {
       this._load();
+      if (!this._themes) this._loadThemes(true);
     }
   }
 
@@ -895,29 +1503,38 @@ class NoticomPanel extends HTMLElement {
     }
   }
 
-  async _playOnNodes(name) {
+  async _playOnNodes(what) {
     try {
       const res = await this._hass.callWS({
         type: "call_service",
         domain: "noticom",
         service: "play_chime",
-        service_data: { chime: name },
+        service_data: what,
         return_response: true,
       });
-      const { played = [], offline = [] } = res.response || {};
+      const { played = [], offline = [], sound, theme } = res.response || {};
+      const which = what.chime ? `${sound}${theme ? ` (${theme})` : ""} ` : "";
       if (!played.length && !offline.length) this._toast("No nodes yet. Adopt a node to hear chimes.");
       else if (!played.length) this._toast(`No nodes online (${offline.join(", ")} offline).`);
-      else this._toast(`Playing on ${played.join(", ")}${offline.length ? ` · offline: ${offline.join(", ")}` : ""}`);
+      else this._toast(`Playing ${which}on ${played.join(", ")}${offline.length ? ` · offline: ${offline.join(", ")}` : ""}`);
     } catch (err) {
       this._toast(`Couldn't play: ${err.message || err}`);
     }
   }
 
   async _delete(name) {
-    if (!confirm(`Delete the chime “${name}”?\n\nAutomations that play it will stop working until you add a chime with the same name.`)) return;
+    const sound = (this._sounds || []).find((c) => c.name === name);
+    const used = sound ? sound.used : [];
+    const where = used.map((u) => `• ${u.chime} in ${u.theme}`).join("\n");
+    const warn = used.length
+      ? `\n\nIt's used by:\n${where}\n\nHoliday themes will fall back to their Default sound.` +
+        (used.some((u) => u.theme_id === "default") ? " Chimes that use it in Default will have no sound until you pick another." : "")
+      : "";
+    if (!confirm(`Delete the sound “${name}”?${warn}`)) return;
     try {
-      const res = await this._hass.callWS({ type: "noticom/chimes/delete", name });
-      this._chimes = res.chimes;
+      const res = await this._hass.callWS({ type: "noticom/sounds/delete", name });
+      this._setSounds(res);
+      this._themes = null;
       this._renderList();
       this._toast(`Deleted “${name}”`);
     } catch (err) {

@@ -53,19 +53,49 @@ Each adopted node is an HA device with:
 
 Actions:
 
-- `noticom.play_chime` — `chime` name; target devices, entities, areas,
-  floors or labels, or nothing for every node. Returns `played`/`offline`
-  node lists as an optional response.
+- `noticom.play_chime` — `chime` name (resolved through the active theme)
+  or `sound` (one library sound, ignoring themes); target devices, entities,
+  areas, floors or labels, or nothing for every node. Returns `chime`,
+  `sound`, `theme` and `played`/`offline` node lists as an optional
+  response. A `chime` that isn't a chime but is a sound's name plays that
+  sound (pre-themes behaviour).
 - `noticom.stop` — stop playback and clear queues on target nodes.
 - `noticom.reload_chimes` — rescan the chime folder now.
 - `noticom.broadcast` (planned) — play an arbitrary audio file on target nodes.
 
-### Chimes
+Integration-wide entities (no device): `select.noticom_theme` (Automatic or
+force a theme) and `sensor.noticom_active_theme` (attributes `reason`:
+`schedule`/`manual`/`default`, `theme_id`, `scheduled`).
 
-Chimes are general-purpose named notification sounds (mailbox, doorbell,
-entry, exit, ...), not tied to any one automation. They live in
-`/config/noticom/chimes/`; the file name without extension is the name
-(matched case-insensitively). Every 30 s (and on `reload_chimes`) the folder
+### Sounds, chimes and themes
+
+- **Sounds** are the audio library (in code and the node protocol these are
+  still called "chimes", for history).
+- **Chimes** are the general-purpose names automations play (mailbox,
+  doorbell, entry, exit, ...). They never change, so automations never need
+  editing. `intercom` is built in (plays before intercom messages).
+- **Themes** pick a sound per chime. Default must cover everything; any
+  chime another theme leaves unset plays Default's sound. Sounds can be in
+  any number of themes; a sound "belongs" to a theme if it's picked there or
+  tagged with it (for the panel's filters).
+- **Schedule:** non-Default themes have up to 12 yearly ranges (`MM-DD` to
+  `MM-DD`, may wrap past New Year, Feb 29 allowed), each optionally limited
+  to hours (`HH:MM`–`HH:MM`, end exclusive, may cross midnight). When
+  several match, the range with the fewest days wins; equal lengths go to
+  the theme higher in the priority list. Mode `auto` follows the schedule;
+  a theme id forces it. Checked every minute (HA's local time).
+- Stored in `.storage/noticom.themes`. On the first start after upgrading,
+  every existing sound becomes a chime of the same name in Default, and the
+  old `intercom_chime` setting becomes the `intercom` chime's Default sound.
+- Nodes keep every sound, so a theme switch never waits for a download, and
+  themes need no node changes.
+- **Usage:** automations and scripts are scanned on demand (their
+  `raw_config`, recursively) for `noticom.play_chime`; the panel shows each
+  chime's users with edit links, plus unknown chime names, templated chimes
+  and direct `sound` plays.
+
+Sounds live in `/config/noticom/chimes/`; the file name without extension
+is the name (matched case-insensitively). Every 30 s (and on `reload_chimes`) the folder
 is rescanned: each WAV/MP3 is decoded (WAV natively, MP3 via ffmpeg),
 mixed to mono, DC-offset removed, peak-normalized to about -1 dBFS (boost
 capped at +20 dB) and cached as 16-bit WAV in `/config/noticom/.cache/`
@@ -91,9 +121,9 @@ for a chime a node hasn't synced yet is fetched on demand.
   as `offline`. Clips stay in memory (last 10, up to 1 h) for delivery and
   the panel; `GET /api/noticom/clip/{id}` (signed) only serves a clip to
   nodes it was sent to. Job reports update each recipient's status. A
-  `noticom_message` event is fired. The intercom chime is a global setting
-  in `.storage/noticom.settings`; a default `intercom` chime (rising
-  G5→C6) is written to the chimes folder once, on first start.
+  `noticom_message` event is fired. The pre-chime is the `intercom` chime,
+  resolved through the active theme; a default `intercom` sound (rising
+  G5→C6) is written to the sound folder once, on first start.
 - **Node playback:** fetch the clip first, play the pre-chime (a missing
   chime doesn't block the message), then the message.
 
@@ -105,18 +135,23 @@ API, all admin-only:
 
 | Call | Use |
 |---|---|
-| WS `noticom/chimes/list` | Chimes: name, hash, duration, source file |
-| `POST /api/noticom/panel/chimes` (multipart `file`, `name`, `replace`) | Upload; names are letters, digits, spaces, `-`, `_` (max 48); 10 MB cap; the file is converted before it replaces anything |
-| `GET /api/noticom/panel/chime/{hash}` | Normalized WAV for the browser preview |
-| WS `noticom/chimes/delete` (`name`) | Delete the chime's file |
-| WS `noticom/intercom/get` | Intercom chime, chime names, nodes (online, PTT, targets), recent messages |
-| WS `noticom/intercom/set_chime` (`chime` or null) | Choose the intercom chime |
+| WS `noticom/sounds/list` | Sounds: name, hash, duration, source file, themes, where used; plus themes |
+| `POST /api/noticom/panel/sounds` (multipart `file`, `name`, `replace`, `make_chime`, `themes`) | Upload; names are letters, digits, spaces, `-`, `_` (max 48); 10 MB cap; the file is converted before it replaces anything. `make_chime` also adds a chime of that name playing it; `themes` (comma-separated ids) tags it |
+| `GET /api/noticom/panel/sound/{hash}` | Normalized WAV for the browser preview |
+| WS `noticom/sounds/delete` (`name`) | Delete the sound; themes using it fall back to Default (returns `was_used`) |
+| WS `noticom/sounds/tag` (`name`, `themes`) | File a sound under themes |
+| WS `noticom/themes/get` | Mode, active theme, themes, chimes (sound per theme, used by), sounds, warnings, year calendar |
+| WS `noticom/themes/set_sound` (`theme_id`, `chime`, `sound` or null) | Pick a sound; null = use Default (or none, in Default) |
+| WS `noticom/themes/add_chime` (`name`, `sound`?) / `delete_chime` (`name`) | Chimes |
+| WS `noticom/themes/add` (`name`) / `update` (`theme_id`, `name`?, `schedule`?) / `delete` / `reorder` (`order`) / `set_mode` (`mode`) | Themes |
+| WS `noticom/intercom/get` | Intercom sound, sound names, nodes (online, PTT, targets), recent messages |
+| WS `noticom/intercom/set_chime` (`chime` or null) | The `intercom` chime's Default sound |
 | WS `noticom/intercom/set_targets` (`node_id`, `targets`: `"all"` or ids) | Who a node can talk to |
 | `GET /api/noticom/panel/clip/{id}` | A recent message, for browser playback |
 
 | WS `noticom/settings/get` / `noticom/settings/set` (`chime_priority`, `node_defaults`) | Global settings; a priority change is pushed to all nodes |
 
-Tabs: **Chimes**, **Intercom** and **Settings**. Settings live in
+Tabs: **Themes**, **Sounds**, **Intercom** and **Settings**. Settings live in
 `.storage/noticom.settings`; `node_defaults` become a new node's entry
 options at adoption (the adoption form also asks for its name). The Intercom tab refreshes every 10 s
 while open. "Play on nodes" calls `noticom.play_chime` with no target.
@@ -127,9 +162,9 @@ output device, volume, mic gain and boost, button GPIO pin and type
 the HAT's onboard button) or PTT disabled, and the allow-list of nodes
 (or all) its intercom messages go to.
 
-The sidebar panel manages chimes (upload WAV/MP3, preview, delete), the
-intercom announce chime, routing, and admin defaults (default button pin,
-chime priority).
+The sidebar panel manages themes and chimes, the sound library (upload
+WAV/MP3, preview, delete, filter by theme), the intercom announce sound,
+routing, and admin defaults (default button pin, chime priority).
 
 ## Protocol
 
@@ -376,3 +411,5 @@ overridable at install time.
 - ~~Manual node setup~~ (done): Add integration → Noticom asks for an IP
   address, calls `GET http://<ip>:8742/info` for the node_id, then runs the
   same `/adopt` handshake and button-press confirmation as discovery.
+- ~~Themes~~ (done): chimes map to sounds per theme, with a yearly schedule.
+  Possible later: movable holidays ("4th Thursday of November").

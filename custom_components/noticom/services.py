@@ -1,4 +1,8 @@
-"""Noticom actions: play_chime, stop, reload_chimes."""
+"""Noticom actions: play_chime, stop, reload_chimes.
+
+play_chime plays a chime (resolved through the active theme) or, with
+`sound`, one sound from the library exactly as it is.
+"""
 
 from __future__ import annotations
 
@@ -20,19 +24,28 @@ from homeassistant.helpers.service import (
 from . import protocol
 from .const import (
     ATTR_CHIME,
+    ATTR_SOUND,
     CONF_NODE_ID,
     DOMAIN,
     SERVICE_PLAY_CHIME,
     SERVICE_RELOAD_CHIMES,
     SERVICE_STOP,
 )
+from .chimes import Chime
 from .hub import NoticomHub
 
 _LOGGER = logging.getLogger(__name__)
 
 # Targets are optional: no target means every node.
-PLAY_CHIME_SCHEMA = vol.Schema(
-    {**cv.ENTITY_SERVICE_FIELDS, vol.Required(ATTR_CHIME): cv.string}
+PLAY_CHIME_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            **cv.ENTITY_SERVICE_FIELDS,
+            vol.Exclusive(ATTR_CHIME, "what"): cv.string,
+            vol.Exclusive(ATTR_SOUND, "what"): cv.string,
+        }
+    ),
+    cv.has_at_least_one_key(ATTR_CHIME, ATTR_SOUND),
 )
 STOP_SCHEMA = vol.Schema(cv.ENTITY_SERVICE_FIELDS)
 
@@ -65,19 +78,21 @@ def async_update_chime_choices(hass: HomeAssistant, names: list[str]) -> None:
     replaced at runtime whenever the chime list changes. Custom values stay
     allowed so templates still work.
     """
+    if not hass.services.has_service(DOMAIN, SERVICE_PLAY_CHIME):
+        return  # not registered yet; async_setup_services sets it
     async_set_service_schema(
         hass,
         DOMAIN,
         SERVICE_PLAY_CHIME,
         {
             "name": "Play chime",
-            "description": "Plays a chime on Noticom nodes. Pick nodes, or leave the target empty to play on all of them.",
+            "description": "Plays a chime on Noticom nodes, using the sound the current theme picks. Pick nodes, or leave the target empty to play on all of them.",
             "target": NODE_TARGET,
             "fields": {
                 ATTR_CHIME: {
                     "name": "Chime",
-                    "description": "Which chime to play. Manage chimes in the Noticom panel.",
-                    "required": True,
+                    "description": "Which chime to play. Manage chimes and themes in the Noticom panel.",
+                    "required": False,
                     "example": names[0] if names else "doorbell",
                     "selector": {
                         "select": {
@@ -86,7 +101,14 @@ def async_update_chime_choices(hass: HomeAssistant, names: list[str]) -> None:
                             "sort": True,
                         }
                     },
-                }
+                },
+                ATTR_SOUND: {
+                    "name": "Sound (instead of a chime)",
+                    "description": "Play this exact sound from the library, ignoring themes.",
+                    "required": False,
+                    "advanced": True,
+                    "selector": {"text": {}},
+                },
             },
         },
     )
@@ -96,15 +118,34 @@ def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's actions."""
     hub: NoticomHub = hass.data[DOMAIN]
 
-    async def play_chime(call: ServiceCall) -> ServiceResponse:
+    def pick_sound(call: ServiceCall) -> tuple[Chime, str | None, str | None]:
+        """(sound, chime name, theme name) for a call."""
+        themes = hub.themes
+        if ATTR_SOUND in call.data:
+            name = call.data[ATTR_SOUND]
+            if (sound := hub.chimes.get(name)) is None:
+                raise ServiceValidationError(f"There's no sound called {name!r}.")
+            return sound, None, None
         name = call.data[ATTR_CHIME]
-        chime = hub.chimes.get(name)
-        if chime is None:
-            available = ", ".join(c.name for c in hub.chimes.chimes) or "none"
+        if (chime := themes.chime_key(name)) is None:
+            # Not a chime: a sound's name still works (as before themes).
+            if (sound := hub.chimes.get(name)) is not None:
+                return sound, None, None
+            available = ", ".join(themes.chime_names()) or "none"
             raise ServiceValidationError(
                 f"No chime named {name!r}. Available: {available}. "
-                "Add WAV or MP3 files to /config/noticom/chimes/."
+                "Add chimes in the Noticom panel."
             )
+        sound_name, theme = themes.resolve(chime)
+        if sound_name is None or (sound := hub.chimes.get(sound_name)) is None:
+            raise ServiceValidationError(
+                f"The chime {chime!r} has no sound in the {theme['name']} or Default "
+                "theme. Pick one in Noticom → Themes."
+            )
+        return sound, chime, theme["name"]
+
+    async def play_chime(call: ServiceCall) -> ServiceResponse:
+        chime, chime_name, theme_name = pick_sound(call)
         played, offline = [], []
         for node_id, title in await _target_nodes(hass, call):
             sent = await hub.async_send(
@@ -116,8 +157,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
             )
             (played if sent else offline).append(title)
         if offline:
-            _LOGGER.info("Chime %s not played on offline nodes: %s", chime.name, ", ".join(offline))
-        return {"chime": chime.name, "played": played, "offline": offline}
+            _LOGGER.info("Sound %s not played on offline nodes: %s", chime.name, ", ".join(offline))
+        return {
+            "chime": chime_name,
+            "sound": chime.name,
+            "theme": theme_name,
+            "played": played,
+            "offline": offline,
+        }
 
     async def stop(call: ServiceCall) -> None:
         for node_id, _ in await _target_nodes(hass, call):
@@ -133,4 +180,4 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(DOMAIN, SERVICE_STOP, stop, STOP_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_RELOAD_CHIMES, reload_chimes)
-    async_update_chime_choices(hass, [c.name for c in hub.chimes.chimes])
+    async_update_chime_choices(hass, hub.themes.chime_names())

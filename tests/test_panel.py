@@ -1,4 +1,4 @@
-"""The sidebar panel's API: list, upload, preview, delete."""
+"""The sidebar panel's sound API: list, upload, preview, delete."""
 
 import aiohttp
 import pytest
@@ -8,7 +8,7 @@ from custom_components.noticom.const import DOMAIN
 
 from .audio_fixtures import write_wav
 
-UPLOAD = "/api/noticom/panel/chimes"
+UPLOAD = "/api/noticom/panel/sounds"
 
 
 @pytest.fixture
@@ -36,14 +36,19 @@ async def test_panel_registered(hass, panel):
     assert panels["noticom"].require_admin
 
 
-async def test_list_chimes(hass, panel, hass_ws_client):
+async def test_list_sounds(hass, panel, hass_ws_client):
     ws = await hass_ws_client(hass)
-    await ws.send_json({"id": 1, "type": "noticom/chimes/list"})
+    await ws.send_json({"id": 1, "type": "noticom/sounds/list"})
     res = await ws.receive_json()
     assert res["success"]
-    assert [c["name"] for c in res["result"]["chimes"]] == ["doorbell", "intercom"]
-    assert res["result"]["chimes"][0]["file"] == "doorbell.wav"
-    assert res["result"]["chimes"][0]["duration"] == pytest.approx(0.2, abs=0.01)
+    sounds = res["result"]["sounds"]
+    assert [c["name"] for c in sounds] == ["doorbell", "intercom"]
+    assert sounds[0]["file"] == "doorbell.wav"
+    assert sounds[0]["duration"] == pytest.approx(0.2, abs=0.01)
+    # Existing sounds became Default-theme chimes on first start.
+    assert sounds[0]["themes"] == ["default"]
+    assert sounds[0]["used"] == [{"theme_id": "default", "theme": "Default", "chime": "doorbell"}]
+    assert res["result"]["themes"] == [{"id": "default", "name": "Default"}]
 
 
 async def test_upload_preview_replace_delete(hass, panel, hass_client, hass_ws_client, tmp_path):
@@ -53,12 +58,13 @@ async def test_upload_preview_replace_delete(hass, panel, hass_client, hass_ws_c
     resp = await client.post(UPLOAD, data=form("Front door", data))
     body = await resp.json()
     assert resp.status == 200, body
-    assert body["chime"] == "Front door"
+    assert body["sound"] == "Front door"
+    assert body["chime"] is None  # make_chime not asked for
     assert (panel / "Front door.wav").exists()
     assert not list(panel.glob(".upload-*"))
-    chime = next(c for c in body["chimes"] if c["name"] == "Front door")
+    chime = next(c for c in body["sounds"] if c["name"] == "Front door")
 
-    preview = await client.get(f"/api/noticom/panel/chime/{chime['hash']}")
+    preview = await client.get(f"/api/noticom/panel/sound/{chime['hash']}")
     assert preview.status == 200 and (await preview.read())[:4] == b"RIFF"
 
     # Same name again: refused unless replacing.
@@ -71,17 +77,17 @@ async def test_upload_preview_replace_delete(hass, panel, hass_client, hass_ws_c
     assert hass.data[DOMAIN].chimes.get("front door").duration == pytest.approx(0.5, abs=0.01)
 
     ws = await hass_ws_client(hass)
-    await ws.send_json({"id": 1, "type": "noticom/chimes/delete", "name": "Front door"})
+    await ws.send_json({"id": 1, "type": "noticom/sounds/delete", "name": "Front door"})
     res = await ws.receive_json()
     assert res["success"]
-    assert [c["name"] for c in res["result"]["chimes"]] == ["doorbell", "intercom"]
+    assert [c["name"] for c in res["result"]["sounds"]] == ["doorbell", "intercom"]
     assert not (panel / "Front door.wav").exists()
 
 
 @pytest.mark.parametrize(
     ("name", "data", "filename", "error"),
     [
-        ("../evil", b"RIFF", "x.wav", "Chime names can use"),
+        ("../evil", b"RIFF", "x.wav", "Names can use"),
         ("ok", b"RIFF", "x.ogg", "WAV or MP3"),
         ("ok", b"definitely not audio", "x.mp3", "couldn't be read"),
     ],
@@ -101,7 +107,10 @@ async def test_non_admin_is_refused(
     data = write_wav(tmp_path / "src.wav").read_bytes()
     assert (await client.post(UPLOAD, data=form("sneaky", data))).status == 403
     ws = await hass_ws_client(hass, hass_read_only_access_token)
-    await ws.send_json({"id": 1, "type": "noticom/chimes/delete", "name": "doorbell"})
+    await ws.send_json({"id": 1, "type": "noticom/sounds/delete", "name": "doorbell"})
+    res = await ws.receive_json()
+    assert not res["success"] and res["error"]["code"] == "unauthorized"
+    await ws.send_json({"id": 2, "type": "noticom/themes/add", "name": "Sneaky"})
     res = await ws.receive_json()
     assert not res["success"] and res["error"]["code"] == "unauthorized"
     assert (panel / "doorbell.wav").exists()
@@ -109,6 +118,6 @@ async def test_non_admin_is_refused(
 
 async def test_delete_unknown(hass, panel, hass_ws_client):
     ws = await hass_ws_client(hass)
-    await ws.send_json({"id": 1, "type": "noticom/chimes/delete", "name": "nope"})
+    await ws.send_json({"id": 1, "type": "noticom/sounds/delete", "name": "nope"})
     res = await ws.receive_json()
     assert not res["success"] and res["error"]["code"] == "not_found"
