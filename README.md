@@ -26,6 +26,8 @@ you like, and mix and match:
 
 - **ReSpeaker HAT** or **USB sound card with a mic**: chimes **and** intercom
 - **The Pi's headphone jack** with powered speakers: chimes only
+- **Any Linux PC** (Ubuntu or Debian) with built-in or USB audio: chimes
+  only
 
 ## What you need
 
